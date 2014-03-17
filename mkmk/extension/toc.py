@@ -10,9 +10,9 @@ import re
 import sys
 
 
-def main(args):
+def main():
   headers = []
-  for arg in args:
+  for arg in sys.argv:
     for line in open(arg):
       match = re.match(r"TEST\((.*)\)", line)
       if match:
@@ -31,7 +31,7 @@ def main(args):
 # alone executable work in python 2 this part comes first and exits before that
 # import is reached.
 if __name__ == '__main__':
-  main(sys.argv[1:])
+  main()
   sys.exit(0)
 
 
@@ -53,7 +53,7 @@ class TocNode(node.PhysicalNode):
   def get_command_line(self, platform):
     outfile = self.get_output_path()
     infiles = self.get_input_paths(test=True)
-    command = "%(generator)s %(infiles)s > %(outfile)s" % {
+    command = "mkmk-test-toc %(infiles)s > %(outfile)s" % {
       "generator": self.generator.get_path(),
       "infiles": " ".join(infiles),
       "outfile": outfile

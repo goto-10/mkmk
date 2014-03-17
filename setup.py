@@ -13,6 +13,7 @@ setuptools.setup(
   entry_points = {
     'console_scripts': [
       'mkmk = mkmk.main:main',
+      'mkmk-test-toc = mkmk.extension.toc:main',
     ]
   },
 )
