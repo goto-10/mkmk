@@ -49,8 +49,6 @@ class MkMk(object):
       help='The location to store generated files in')
     parser.add_argument('--buildflags', default=None,
       help='Flags to pass through to the build process')
-    parser.add_argument('--toolchain', default='gcc',
-      help='Which C toolchain to use')
     parser.add_argument('--extension', default=[], action='append',
       help='Specify a build extension to enable')
     parser.add_argument('--noisy', default=False, action='store_true',
@@ -61,6 +59,8 @@ class MkMk(object):
       help='Name of the build script to generate')
     parser.add_argument('--before', default=None,
       help='Version to compare with when running has_changed')
+    parser.add_argument('--system', default='posix',
+      help='The system/os we\'re building on')
     return parser
 
   # Returns a map from handler names to handlers.

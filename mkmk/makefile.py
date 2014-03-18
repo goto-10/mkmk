@@ -371,15 +371,16 @@ class ConfigContext(object):
 # output generator.
 class Environment(object):
 
-  def __init__(self, root, bindir, extensions, noisy):
+  def __init__(self, root, bindir, options):
     self.root = root
     self.bindir = bindir
-    self.extension_names = extensions
+    self.options = options
+    self.extension_names = options.extension
     self.extensions = None
     self.nodes = {}
     self.custom_flags = None
     self.system = None
-    self.noisy = noisy
+    self.noisy = options.noisy
 
   # If there is already a node registered under the given name returns it,
   # otherwise creates and registers a new one by calling the given constructor
@@ -425,7 +426,7 @@ class Environment(object):
   def get_system(self):
     if self.system is None:
       from . import system
-      self.system = system.get('posix')
+      self.system = system.get(self.options.system)
     return self.system
 
   # Returns a list of (name, controller) pairs with an entry for each extension
@@ -562,8 +563,7 @@ class MkMkMakefile(object):
     root_mkmk = AbstractFile.at(self.options.config)
     root_mkmk_home = root_mkmk.get_parent()
     bindir = AbstractFile.at(self.options.bindir)
-    env = Environment(root_mkmk_home, bindir, self.options.extension,
-      self.options.noisy)
+    env = Environment(root_mkmk_home, bindir, self.options)
     env.parse_custom_flags(self.options.buildflags)
     context = ConfigContext(env, root_mkmk_home, Name.of())
     context.load(root_mkmk)

@@ -154,83 +154,46 @@ class MSVC(Toolchain):
       "/wd4310", # Cast truncates constant
     ]
     # Debug flags
-    if self.get_config_option("debug"):
+    if self.config.debug:
       result += ["/Od", "/Zi"]
     else:
       result += ["/Ox"]
     # Checks en/dis-abled
-    if self.get_config_option("checks"):
+    if self.config.checks:
       result += ["/DENABLE_CHECKS=1"]
     # Strict errors
-    if not self.get_config_option("warn"):
+    if not self.config.warn:
       result += ["/WX"]
     return result
 
   def get_object_compile_command(self, output, inputs, includepaths):
     def build_source_argument(path):
-      return "/Tp%s" % process.shell_escape(path)
+      return "/Tp%s" % shell_escape(path)
     cflags = ["/c"] + self.get_config_flags()
     for path in includepaths:
-      cflags.append("/I%s" % process.shell_escape(path))
+      cflags.append("/I%s" % shell_escape(path))
     command = "$(CC) %(cflags)s /Fo%(output)s %(inputs)s" % {
-      "output": process.shell_escape(output),
+      "output": shell_escape(output),
       "inputs": " ".join(map(build_source_argument, inputs)),
       "cflags": " ".join(cflags)
     }
     comment = "Building %s" % os.path.basename(output)
-    return process.Command(command).set_comment(comment)
+    return Command(command).set_comment(comment)
 
   def get_object_file_ext(self):
     return "obj"
 
   def get_executable_compile_command(self, output, inputs):
     command = "$(CC) /nologo /Fe%(output)s %(inputs)s" % {
-      "output": process.shell_escape(output),
-      "inputs": " ".join(map(process.shell_escape, inputs))
+      "output": shell_escape(output),
+      "inputs": " ".join(map(shell_escape, inputs))
     }
     comment = "Building executable %s" % os.path.basename(output)
-    return process.Command(command).set_comment(comment)
+    return Command(command).set_comment(comment)
 
   def get_executable_file_ext(self):
     return "exe"
 
-  def get_ensure_folder_command(self, folder):
-    # Windows mkdir doesn't have an equivalent to -p but we can use a bit of
-    # logic instead.
-    path = process.shell_escape(folder)
-    action = "if not exist %(path)s mkdir %(path)s" % {"path": path}
-    return process.Command(action)
-
-  def get_clear_folder_command(self, folder):
-    path = process.shell_escape(folder)
-    comment = "Clearing '%s'" % path
-    action = "if exist %(path)s rmdir /s /q %(path)s" % {"path": path}
-    return process.Command(action).set_comment(comment)
-
-  def get_safe_tee_command(self, command_line, outpath):
-    params = {
-      "command_line": command_line,
-      "outpath": outpath
-    }
-    parts = [
-      "%(command_line)s > %(outpath)s || echo > %(outpath)s.fail",
-      "type %(outpath)s",
-      "if exist %(outpath)s.fail (del %(outpath)s %(outpath)s.fail && exit 1) else (exit 0)",
-    ]
-    comment = "Running %(command_line)s" % params
-    return process.Command(*[part % params for part in parts])
-
-  def run_with_environment(self, command, env):
-    envs = []
-    for (name, value, mode) in env:
-      if mode == "append":
-        envs.append("set %(name)s=%%%(name)s%%:%(value)s" % {
-          "name": name,
-          "value": value
-        })
-      else:
-        raise Exception("Unknown mode %s" % mode)
-    return "%s && %s" % (" && ".join(envs), command)
 
 # Returns the toolchain with the given name
 def get_toolchain(name, config):

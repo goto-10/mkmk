@@ -79,8 +79,50 @@ class PosixSystem(System):
 
 
 class WindowsSystem(System):
-  pass
+
+  def get_ensure_folder_command(self, folder):
+    # Windows mkdir doesn't have an equivalent to -p but we can use a bit of
+    # logic instead.
+    path = shell_escape(folder)
+    action = "if not exist %(path)s mkdir %(path)s" % {"path": path}
+    return Command(action)
+
+  def get_clear_folder_command(self, folder):
+    path = shell_escape(folder)
+    comment = "Clearing '%s'" % path
+    action = "if exist %(path)s rmdir /s /q %(path)s" % {"path": path}
+    return Command(action).set_comment(comment)
+
+  def get_safe_tee_command(self, command_line, outpath):
+    params = {
+      "command_line": command_line,
+      "outpath": outpath
+    }
+    parts = [
+      "%(command_line)s > %(outpath)s || echo > %(outpath)s.fail",
+      "type %(outpath)s",
+      "if exist %(outpath)s.fail (del %(outpath)s %(outpath)s.fail && exit 1) else (exit 0)",
+    ]
+    comment = "Running %(command_line)s" % params
+    return Command(*[part % params for part in parts])
+
+  def run_with_environment(self, command, env):
+    envs = []
+    for (name, value, mode) in env:
+      if mode == "append":
+        envs.append("set %(name)s=%%%(name)s%%:%(value)s" % {
+          "name": name,
+          "value": value
+        })
+      else:
+        raise Exception("Unknown mode %s" % mode)
+    return "%s && %s" % (" && ".join(envs), command)
 
 
 def get(os):
-  return PosixSystem()
+  if os == 'posix':
+    return PosixSystem()
+  elif os == 'windows':
+    return WindowsSystem()
+  else:
+    raise AssertionError("Unknown system '%s'." % os)

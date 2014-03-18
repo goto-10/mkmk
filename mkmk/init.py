@@ -92,7 +92,7 @@ REM tool or copy it to another name and then edit that to avoid your changes
 REM being randomly overwritten.
 
 for /f "tokens=*" %%%%a in (
-  'python %(init_tool)s has_changed --before "%(init_version)s"'
+  '%(init_tool)s has_changed --before "%(version)s"'
 ) do (
   set init_changed=%%%%a
 )
@@ -100,8 +100,8 @@ for /f "tokens=*" %%%%a in (
 if "%%init_changed%%" == "Changed" (
   echo # The workspace initializer has changed. Reinitializing by running
   echo #
-  echo #   python %(init_tool)s %(init_args)s
-  python %(init_tool)s %(init_args)s
+  echo #   %(init_tool)s %(init_args)s
+  %(init_tool)s %(init_args)s
   if %%errorlevel%% neq 0 exit /b %%errorlevel%%
   echo #
   echo # Build script regenerated. Running the new script like so:
@@ -109,7 +109,7 @@ if "%%init_changed%%" == "Changed" (
   echo #   %%0 %%*
   call %%0 %%*
 ) else (
-  python %(mkmk_tool)s makefile --config "%(config)s" --bindir "%(bindir)s" --makefile "%(Makefile.mkmk)s" --toolchain msvc %(variant_flags)s
+  %(mkmk_tool)s makefile --config "%(config)s" --bindir "%(bindir)s" --makefile "%(Makefile.mkmk)s" --extension c --extension n --extension py --extension test --extension toc --system windows --buildflags="--toolchain msvc %(variant_flags)s"
   if %%errorlevel%% neq 0 exit /b %%errorlevel%%
 
   nmake /nologo -f "%(Makefile.mkmk)s" %%*
