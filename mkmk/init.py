@@ -109,7 +109,7 @@ if "%%init_changed%%" == "Changed" (
   echo #   %%0 %%*
   call %%0 %%*
 ) else (
-  %(mkmk_tool)s makefile --config "%(config)s" --bindir "%(bindir)s" --makefile "%(Makefile.mkmk)s" --extension c --extension n --extension py --extension test --extension toc --system windows --buildflags="--toolchain msvc %(variant_flags)s"
+  %(mkmk_tool)s makefile --config "%(config)s" --bindir "%(bindir)s" --makefile "%(Makefile.mkmk)s" --extension c --extension n --extension py --extension test --extension toc --system windows --buildflags="--toolchain msvc %(variant_flags)s" %(cond_flags)s
   if %%errorlevel%% neq 0 exit /b %%errorlevel%%
 
   nmake /nologo -f "%(Makefile.mkmk)s" %%*

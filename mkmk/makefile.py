@@ -98,7 +98,7 @@ class Name(object):
     return cmp(self.parts, that.parts)
 
   def __str__(self):
-    return "|".join(self.parts)
+    return "::".join(self.parts)
 
   def __repr__(self):
     return str(self)
@@ -380,7 +380,6 @@ class Environment(object):
     self.nodes = {}
     self.custom_flags = None
     self.system = None
-    self.noisy = options.noisy
 
   # If there is already a node registered under the given name returns it,
   # otherwise creates and registers a new one by calling the given constructor
@@ -392,7 +391,7 @@ class Environment(object):
     return self.add_node(full_name, new_node)
 
   def is_noisy(self):
-    return self.noisy
+    return self.options.noisy
 
   def add_node(self, full_name, node):
     self.nodes[full_name] = node
