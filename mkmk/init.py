@@ -63,7 +63,7 @@ if [ $INIT_CHANGED = "Changed" ]; then
 fi
 
 # Rebuild makefile every time.
-%(mkmk_tool)s makefile \\
+"%(mkmk_tool)s" makefile \\
   --config "%(config)s" \\
   --bindir "%(bindir)s" \\
   --makefile "%(Makefile.mkmk)s" \\
@@ -76,7 +76,7 @@ fi
   %(cond_flags)s
 
 # Delegate to the resulting makefile.
-make -f "%(Makefile.mkmk)s" $*
+make -f "%(Makefile.mkmk)s" "$@"
 """
 
 
