@@ -52,15 +52,16 @@ class Toolchain(object):
 # The gcc toolchain. Clang is gcc-compatible so this works for clang too.
 class Gcc(Toolchain):
 
-  def get_config_flags(self):
+  def get_config_flags(self, is_cpp):
     result = [
       "-Wall",
       "-Wextra",                    # More errors please.
       "-Wno-unused-parameter",      # Sometime you don't need all the params.
       "-Wno-unused-function",       # Not all header functions are used in all.
                                     #   the files that include them.
-      "-std=c99",
     ]
+    if not is_cpp:
+      result += ["-std=c99"]
     # Annoyingly this warning option only exists in gcc > 4.8 and not in clang.
     if self.config.gcc48:
       result += ["-Wno-unused-local-typedefs"]
@@ -85,17 +86,23 @@ class Gcc(Toolchain):
   def get_linker_flags(self):
     result = [
       "-rdynamic",
-      "-lrt"
+      "-lrt",
+      "-lstdc++",
     ]
     if self.config.gprof:
       result += ["-pg"]
     return result
 
-  def get_object_compile_command(self, output, inputs, includepaths):
-    cflags = ["$(CFLAGS)"] + self.get_config_flags()
+  def get_object_compile_command(self, output, inputs, includepaths, is_cpp):
+    cflags = ["$(CFLAGS)"] + self.get_config_flags(is_cpp)
     for path in includepaths:
       cflags.append("-I%s" % shell_escape(path))
-    command = "$(CC) %(cflags)s -c -o %(output)s %(inputs)s" % {
+    if is_cpp:
+      compiler = "$(CXX)"
+    else:
+      compiler = "$(CC)"
+    command = "%(compiler)s %(cflags)s -c -o %(output)s %(inputs)s" % {
+      "compiler": compiler,
       "output": shell_escape(output),
       "inputs": " ".join(map(shell_escape, inputs)),
       "cflags": " ".join(cflags)
@@ -166,7 +173,7 @@ class MSVC(Toolchain):
       result += ["/WX"]
     return result
 
-  def get_object_compile_command(self, output, inputs, includepaths):
+  def get_object_compile_command(self, output, inputs, includepaths, is_cpp):
     def build_source_argument(path):
       return "/Tp%s" % shell_escape(path)
     cflags = ["/c"] + self.get_config_flags()
@@ -336,25 +343,26 @@ class CSourceNode(AbstractNode):
   # file.
   def get_object(self):
     name = self.get_name()
-    return self.context.get_or_create_node("%s:object" % name, ObjectNode, self)
+    is_cpp = name.endswith(".cc")
+    return self.context.get_or_create_node("%s:object" % name, ObjectNode, self, is_cpp)
 
 
 # A node representing a built object file.
 class ObjectNode(AbstractNode):
   
-  def __init__(self, name, context, source):
+  def __init__(self, name, context, source, is_cpp):
     super(ObjectNode, self).__init__(name, context, source.get_tools())
     self.add_dependency(source, src=True)
     self.source = source
+    self.is_cpp = is_cpp
 
   def get_source(self):
     return self.source
 
   def get_output_file(self):
     source_name = self.get_source().get_name()
-    (source_name_root, source_name_ext) = os.path.splitext(source_name)
     ext = self.get_toolchain().get_object_file_ext()
-    object_name = "%s.%s" % (source_name_root, ext)
+    object_name = "%s.%s" % (source_name, ext)
     return self.get_context().get_outdir_file(object_name)
 
   def get_command_line(self, system):
@@ -363,7 +371,7 @@ class ObjectNode(AbstractNode):
     inpaths = self.get_input_paths(src=True)
     includes = [p.get_path() for p in includepaths]
     return self.get_toolchain().get_object_compile_command(outpath, inpaths,
-      includepaths=includes)
+      includepaths=includes, is_cpp=self.is_cpp)
 
   def get_computed_dependencies(self):
     return self.get_source().get_included_headers()
