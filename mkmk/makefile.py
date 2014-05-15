@@ -268,6 +268,10 @@ class ConfigContext(object):
     subcontext = ConfigContext(self.env, mkmk_home, full_name)
     subcontext.load(full_mkmk)
 
+  @export_to_build_scripts
+  def include_dep(self, *rel_mkmk_path):
+    self.include('deps', *rel_mkmk_path)
+
   # Returns a group node with the given name, creating it if it doesn't already
   # exist.
   @export_to_build_scripts
@@ -288,6 +292,11 @@ class ConfigContext(object):
   @export_to_build_scripts
   def get_root(self):
     return self.env.get_root()
+
+  # Returns a file object representing the dependency with the given name.
+  @export_to_build_scripts
+  def get_dep(self, name):
+    return self.get_root().get_child('deps', name)
 
   # Returns a file object representing the root of the build output directory.
   @export_to_build_scripts
