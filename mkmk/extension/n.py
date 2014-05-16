@@ -8,7 +8,6 @@
 from .. import extend
 from .. import node
 from ..command import Command, shell_escape
-import plankton.options
 
 
 # A node representing a neutrino source file.
@@ -54,6 +53,7 @@ class NLibrary(NBinary):
     return "nl"
 
   def get_command_line(self, system):
+    import plankton.options
     [compiler_node] = self.get_input_nodes(compiler=True)
     manifests = self.get_input_paths(manifest=True)
     compile_command_line = compiler_node.get_run_command_line(system)
@@ -80,6 +80,7 @@ class NProgram(NBinary):
     return self
 
   def get_command_line(self, system):
+    import plankton.options
     [compiler_node] = self.get_input_nodes(compiler=True)
     compile_command_line = compiler_node.get_run_command_line(system)
     outpath = self.get_output_path()
