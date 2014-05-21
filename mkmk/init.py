@@ -93,7 +93,7 @@ if "%%init_changed%%" == "Changed" (
   echo #
   echo #   %(init_tool)s %(init_args)s
   %(init_tool)s %(init_args)s
-  if %%errorlevel%% neq 0 exit /b %%errorlevel%%
+  if ERRORLEVEL 1 exit /b 1
   echo #
   echo # Build script regenerated. Running the new script like so:
   echo #
@@ -101,10 +101,10 @@ if "%%init_changed%%" == "Changed" (
   call %%0 %%*
 ) else (
   %(mkmk_tool)s makefile --config "%(config)s" --bindir "%(bindir)s" --makefile "%(Makefile.mkmk)s" --extension c --extension n --extension py --extension test --extension toc --system windows --buildflags="--toolchain msvc %(variant_flags)s" %(cond_flags)s
-  if %%errorlevel%% neq 0 exit /b %%errorlevel%%
+  if ERRORLEVEL 1 exit /b 1
 
   nmake /nologo -f "%(Makefile.mkmk)s" %%*
-  if %%errorlevel%% neq 0 exit /b %%errorlevel%%
+  if ERRORLEVEL 1 exit /b 1
 )
 """
 
