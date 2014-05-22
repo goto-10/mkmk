@@ -59,6 +59,7 @@ class Gcc(Toolchain):
       "-Wno-unused-parameter",      # Sometime you don't need all the params.
       "-Wno-unused-function",       # Not all header functions are used in all.
                                     #   the files that include them.
+      "-fPIC",
     ]
     if not is_cpp:
       result += ["-std=c99"]
@@ -123,8 +124,21 @@ class Gcc(Toolchain):
     comment = "Building executable %s" % os.path.basename(output)
     return Command(command).set_comment(comment)
 
+  def get_shared_library_compile_command(self, output, inputs):
+    linkflags = self.get_linker_flags()
+    command = "$(CC) -shared -o %(output)s %(inputs)s %(linkflags)s" % {
+      "output": shell_escape(output),
+      "inputs": " ".join(map(shell_escape, inputs)),
+      "linkflags": " ".join(linkflags),
+    }
+    comment = "Building shared library %s" % os.path.basename(output)
+    return Command(command).set_comment(comment)
+
   def get_executable_file_ext(self):
     return None
+
+  def get_shared_library_file_ext(self):
+    return "so"
 
 
 # The Microsoft visual studio toolchain.
@@ -198,8 +212,19 @@ class MSVC(Toolchain):
     comment = "Building executable %s" % os.path.basename(output)
     return Command(command).set_comment(comment)
 
+  def get_shared_library_compile_command(self, output, inputs):
+    command = "link.exe /nologo /DLL /OUT:%(output)s %(inputs)s" % {
+      "output": shell_escape(output),
+      "inputs": " ".join(map(shell_escape, inputs))
+    }
+    comment = "Building shared library %s" % os.path.basename(output)
+    return Command(command).set_comment(comment)
+
   def get_executable_file_ext(self):
     return "exe"
+
+  def get_shared_library_file_ext(self):
+    return "dll"
 
 
 # Returns the toolchain with the given name
@@ -257,6 +282,29 @@ class ExecutableNode(AbstractNode):
     if flags.time:
       exec_command = _TIME_COMMAND + exec_command
     return " ".join(map(shell_escape, exec_command))
+
+
+# A build dependency node that represents a shared library.
+class SharedLibraryNode(AbstractNode):
+
+  def get_output_file(self):
+    name = self.get_name()
+    ext = self.get_toolchain().get_shared_library_file_ext()
+    if ext:
+      filename = "%s.%s" % (name, ext)
+    else:
+      filename = name
+    return self.get_context().get_outdir_file(filename)
+
+  # Adds an object file to be compiled into this shared library. Groups will be
+  # flattened.
+  def add_object(self, node):
+    self.add_dependency(node, obj=True)
+
+  def get_command_line(self, platform):
+    outpath = self.get_output_path()
+    inpaths = self.get_input_paths(obj=True)
+    return self.get_toolchain().get_shared_library_compile_command(outpath, inpaths)
 
 
 # A node representing a C source file.
@@ -402,6 +450,10 @@ class CTools(extend.ToolSet):
   # Returns an empty executable node that can then be configured.
   def get_executable(self, name):
     return self.get_context().get_or_create_node(name, ExecutableNode, self)
+
+  # Returns an empty shared library node that can then be configured.
+  def get_shared_library(self, name):
+    return self.get_context().get_or_create_node(name, SharedLibraryNode, self)
 
   def get_env_printer(self, name):
     return self.get_context().get_or_create_node(name, EnvPrinterNode, self)
