@@ -134,11 +134,19 @@ class Gcc(Toolchain):
     comment = "Building shared library %s" % os.path.basename(output)
     return Command(command).set_comment(comment)
 
+  def get_message_resource_compile_command(self, output, inputs):
+    command = "touch %s" % output
+    comment = "Creating dummy message resource %s" % os.path.basename(output)
+    return Command(command).set_comment(comment)
+
   def get_executable_file_ext(self):
     return None
 
   def get_shared_library_file_ext(self):
     return "so"
+
+  def get_message_resource_file_ext(self):
+    return None
 
 
 # The Microsoft visual studio toolchain.
@@ -220,11 +228,26 @@ class MSVC(Toolchain):
     comment = "Building shared library %s" % os.path.basename(output)
     return Command(command).set_comment(comment)
 
+  def get_message_resource_compile_command(self, output, inputs):
+    (base, ext) = os.path.splitext(output)
+    command_1 = "mc.exe -z %(output)s %(inputs)s" % {
+      "output": shell_escape(base),
+      "inputs": " ".join(map(shell_escape, inputs))
+    }
+    command_2 = "rc.exe /nologo /r %(output)s.rc" % {
+      "output": shell_escape(base)
+    }
+    comment = "Building message resource %s" % os.path.basename(output)
+    return Command(command_1, command_2).set_comment(comment)
+
   def get_executable_file_ext(self):
     return "exe"
 
   def get_shared_library_file_ext(self):
     return "dll"
+
+  def get_message_resource_file_ext(self):
+    return "res"
 
 
 # Returns the toolchain with the given name
@@ -306,6 +329,25 @@ class SharedLibraryNode(AbstractNode):
     inpaths = self.get_input_paths(obj=True)
     return self.get_toolchain().get_shared_library_compile_command(outpath, inpaths)
 
+
+class MessageResourceNode(AbstractNode):
+
+  def get_output_file(self):
+    name = self.get_name()
+    ext = self.get_toolchain().get_message_resource_file_ext()
+    if ext:
+      filename = "%s.%s" % (name, ext)
+    else:
+      filename = name
+    return self.get_context().get_outdir_file(filename)
+
+  def add_source(self, node):
+    self.add_dependency(node, src=True)
+
+  def get_command_line(self, platform):
+    outpath = self.get_output_path()
+    inpaths = self.get_input_paths(src=True)
+    return self.get_toolchain().get_message_resource_compile_command(outpath, inpaths)
 
 # A node representing a C source file.
 _HEADER_PATTERN = re.compile(r'#include\s+"([^"]+)"')
@@ -454,6 +496,11 @@ class CTools(extend.ToolSet):
   # Returns an empty shared library node that can then be configured.
   def get_shared_library(self, name):
     return self.get_context().get_or_create_node(name, SharedLibraryNode, self)
+
+  # Returns an empty message resource node that can then be configured. These
+  # don't actually do anything except on windows.
+  def get_message_resource(self, name):
+    return self.get_context().get_or_create_node(name, MessageResourceNode, self)
 
   def get_env_printer(self, name):
     return self.get_context().get_or_create_node(name, EnvPrinterNode, self)
