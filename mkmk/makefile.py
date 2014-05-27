@@ -320,10 +320,19 @@ class ConfigContext(object):
   def get_custom_exec_file(self, file_path):
     return self.get_or_create_node(file_path, node.CustomExecNode, file_path)
 
+  @export_to_build_scripts
+  def get_copy(self, file_path, source_file):
+    target_file = self.get_outdir_file(file_path)
+    return self.get_or_create_node(file_path, node.CopyNode, source_file, target_file)
+
   # Returns a node representing the output of running a system command.
   @export_to_build_scripts
   def get_system_exec_file(self, file_path):
     return self.get_or_create_node(file_path, node.SystemExecNode, file_path)
+
+  @export_to_build_scripts
+  def get_system_file(self, name):
+    return AbstractFile.at(name)
 
   # Creates a source file that represents the given source file.
   @export_to_build_scripts

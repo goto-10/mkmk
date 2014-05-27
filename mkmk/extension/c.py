@@ -124,7 +124,7 @@ class Gcc(Toolchain):
     comment = "Building executable %s" % os.path.basename(output)
     return Command(command).set_comment(comment)
 
-  def get_shared_library_compile_command(self, output, inputs):
+  def get_shared_library_compile_command(self, output, inputs, libs):
     linkflags = self.get_linker_flags()
     command = "$(CC) -shared -o %(output)s %(inputs)s %(linkflags)s" % {
       "output": shell_escape(output),
@@ -220,10 +220,10 @@ class MSVC(Toolchain):
     comment = "Building executable %s" % os.path.basename(output)
     return Command(command).set_comment(comment)
 
-  def get_shared_library_compile_command(self, output, inputs):
+  def get_shared_library_compile_command(self, output, inputs, libs):
     command = "link.exe /nologo /DLL /OUT:%(output)s %(inputs)s" % {
       "output": shell_escape(output),
-      "inputs": " ".join(map(shell_escape, inputs))
+      "inputs": " ".join(map(shell_escape, inputs + libs))
     }
     comment = "Building shared library %s" % os.path.basename(output)
     return Command(command).set_comment(comment)
@@ -310,6 +310,10 @@ class ExecutableNode(AbstractNode):
 # A build dependency node that represents a shared library.
 class SharedLibraryNode(AbstractNode):
 
+  def __init__(self, name, context, tools):
+    super(SharedLibraryNode, self).__init__(name, context, tools)
+    self.libraries = set()
+
   def get_output_file(self):
     name = self.get_name()
     ext = self.get_toolchain().get_shared_library_file_ext()
@@ -324,10 +328,19 @@ class SharedLibraryNode(AbstractNode):
   def add_object(self, node):
     self.add_dependency(node, obj=True)
 
+  # Adds a file to the set of libraries to link with.
+  def add_library(self, file):
+    self.libraries.add(file.get_path())
+
+  # Returns the sorted list of libraries to link with.
+  def get_libraries(self):
+    return sorted(list(self.libraries))
+
   def get_command_line(self, platform):
     outpath = self.get_output_path()
     inpaths = self.get_input_paths(obj=True)
-    return self.get_toolchain().get_shared_library_compile_command(outpath, inpaths)
+    libs = self.get_libraries()
+    return self.get_toolchain().get_shared_library_compile_command(outpath, inpaths, libs)
 
 
 class MessageResourceNode(AbstractNode):

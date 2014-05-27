@@ -76,6 +76,10 @@ class PosixSystem(System):
         raise Exception("Unknown mode %s" % mode)
     return "%s %s" % (" ".join(envs), command)
 
+  def get_copy_command(self, source, target):
+    command = "cp %s %s" % (shell_escape(source), shell_escape(target))
+    comment = "Copying to '%s'" % target
+    return Command(command).set_comment(comment)
 
 
 class WindowsSystem(System):
@@ -110,13 +114,18 @@ class WindowsSystem(System):
     envs = []
     for (name, value, mode) in env:
       if mode == "append":
-        envs.append("set %(name)s=%%%(name)s%%:%(value)s" % {
+        envs.append("set %(name)s=%%%(name)s%%;%(value)s" % {
           "name": name,
           "value": value
         })
       else:
         raise Exception("Unknown mode %s" % mode)
-    return "%s && %s" % (" && ".join(envs), command)
+    return "cmd /c \"%s && %s\"" % (" && ".join(envs), command)
+
+  def get_copy_command(self, source, target):
+    command = "copy %s %s" % (shell_escape(source), shell_escape(target))
+    comment = "Copying to '%s'" % target
+    return Command(command).set_comment(comment)
 
 
 def get(os):

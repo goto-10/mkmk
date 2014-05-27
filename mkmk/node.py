@@ -232,6 +232,24 @@ class SystemExecNode(CustomExecNode):
     return self.command
 
 
+# Copies the source file to the target.
+class CopyNode(PhysicalNode):
+
+  def __init__(self, name, context, source, target):
+    super(CopyNode, self).__init__(self, context)
+    self.add_dependency(source, source=True)
+    self.target = target
+
+  def get_output_file(self):
+    return self.target
+
+  def get_command_line(self, system):
+    [source_node] = self.get_input_nodes(source=True)
+    inpath = source_node.get_output_file().get_path()
+    outpath = self.target.get_path()
+    return system.get_copy_command(inpath, outpath)
+
+
 # A dependency between nodes. An edge is like a pointer from one node to another
 # but additionally carries a set of annotations that control what the pointer
 # means. For instance, an object file may depend on both a source file and its
