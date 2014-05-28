@@ -59,6 +59,7 @@ class Gcc(Toolchain):
       "-Wno-unused-parameter",      # Sometime you don't need all the params.
       "-Wno-unused-function",       # Not all header functions are used in all.
                                     #   the files that include them.
+      "-Wno-invalid-offsetof",      # Not really helpful.
       "-fPIC",
     ]
     if not is_cpp:
@@ -363,7 +364,7 @@ class MessageResourceNode(AbstractNode):
     return self.get_toolchain().get_message_resource_compile_command(outpath, inpaths)
 
 # A node representing a C source file.
-_HEADER_PATTERN = re.compile(r'#include\s+"([^"]+)"')
+_HEADER_PATTERN = re.compile(r'#\s+include\s+"([^"]+)"')
 class CSourceNode(AbstractNode):
 
   def __init__(self, name, context, tools, handle):
