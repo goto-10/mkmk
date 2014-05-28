@@ -59,10 +59,11 @@ class Gcc(Toolchain):
       "-Wno-unused-parameter",      # Sometime you don't need all the params.
       "-Wno-unused-function",       # Not all header functions are used in all.
                                     #   the files that include them.
-      "-Wno-invalid-offsetof",      # Not really helpful.
       "-fPIC",
     ]
-    if not is_cpp:
+    if is_cpp:
+      result += ["-Wno-invalid-offsetof"]
+    else:
       result += ["-std=c99"]
     # Annoyingly this warning option only exists in gcc > 4.8 and not in clang.
     if self.config.gcc48:
