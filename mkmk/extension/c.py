@@ -96,7 +96,8 @@ class Gcc(Toolchain):
       result += ["-pg"]
     return result
 
-  def get_object_compile_command(self, output, inputs, includepaths, is_cpp):
+  def get_object_compile_command(self, output, inputs, includepaths, defines,
+      is_cpp, force_c):
     cflags = ["$(CFLAGS)"] + self.get_config_flags(is_cpp)
     for path in includepaths:
       cflags.append("-I%s" % shell_escape(path))
@@ -104,6 +105,8 @@ class Gcc(Toolchain):
       compiler = "$(CXX)"
     else:
       compiler = "$(CC)"
+    for (name, value) in defines:
+      cflags.append("-D%s=%s" % (name, value))
     command = "%(compiler)s %(cflags)s -c -o %(output)s %(inputs)s" % {
       "compiler": compiler,
       "output": shell_escape(output),
@@ -197,9 +200,16 @@ class MSVC(Toolchain):
       result += ["/WX"]
     return result
 
-  def get_object_compile_command(self, output, inputs, includepaths, is_cpp):
+  def get_object_compile_command(self, output, inputs, includepaths, defines,
+      is_cpp, force_c):
     def build_source_argument(path):
-      return "/Tp%s" % shell_escape(path)
+      # Unless you explicitly force C compilation we'll use C++ even for C
+      # files because the version of C supported by MSVC is ancient.
+      if force_c:
+        option = "Tc"
+      else:
+        option = "Tp"
+      return "/%s%s" % (option, shell_escape(path))
     cflags = ["/c"] + self.get_config_flags()
     for path in includepaths:
       cflags.append("/I%s" % shell_escape(path))
@@ -365,7 +375,7 @@ class MessageResourceNode(AbstractNode):
     return self.get_toolchain().get_message_resource_compile_command(outpath, inpaths)
 
 # A node representing a C source file.
-_HEADER_PATTERN = re.compile(r'#\s+include\s+"([^"]+)"')
+_HEADER_PATTERN = re.compile(r'#\s*include\s+"([^"]+)"')
 class CSourceNode(AbstractNode):
 
   def __init__(self, name, context, tools, handle):
@@ -373,12 +383,21 @@ class CSourceNode(AbstractNode):
     self.handle = handle
     self.includes = set()
     self.headers = None
+    self.defines = []
+    self.force_c = False
 
   def get_display_name(self):
     return self.handle.get_path()
 
   def get_input_file(self):
     return self.handle
+
+  def set_force_c(self, value):
+    self.force_c = value
+    return self
+
+  def get_force_c(self):
+    return self.force_c
 
   # Returns the list of names included into the given file. Used to calculate
   # the transitive includes.
@@ -440,9 +459,15 @@ class CSourceNode(AbstractNode):
   def add_include(self, path):
     self.includes.add(path)
 
+  def add_define(self, key, value):
+    self.defines.append((key, value))
+
   # Returns a sorted list of the include paths for this source file.
   def get_includes(self):
     return sorted(list(self.includes))
+
+  def get_defines(self):
+    return self.defines
 
   # Returns a node representing the object produced by compiling this C source
   # file.
@@ -472,11 +497,13 @@ class ObjectNode(AbstractNode):
 
   def get_command_line(self, system):
     includepaths = self.source.get_includes()
+    defines = self.source.get_defines()
     outpath = self.get_output_path()
     inpaths = self.get_input_paths(src=True)
     includes = [p.get_path() for p in includepaths]
     return self.get_toolchain().get_object_compile_command(outpath, inpaths,
-      includepaths=includes, is_cpp=self.is_cpp)
+      includepaths=includes, defines=defines, is_cpp=self.is_cpp,
+      force_c=self.source.get_force_c())
 
   def get_computed_dependencies(self):
     return self.get_source().get_included_headers()
