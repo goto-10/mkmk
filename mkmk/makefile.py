@@ -76,6 +76,10 @@ class Name(object):
   def append(self, *subparts):
     return Name(self.parts + subparts)
 
+  # Returns a new name that consists of the given prefix followed by this name.
+  def prepend(self, *prefix):
+    return Name(prefix + self.parts)
+
   # Returns a tuple that holds the parts of this name.
   def get_parts(self):
     return self.parts
@@ -243,8 +247,9 @@ def export_to_build_scripts(fun):
 # and for holding context information for a given mkmk file.
 class ConfigContext(object):
 
-  def __init__(self, env, home, full_name):
-    self.env = env
+  def __init__(self, nodespace, home, full_name):
+    self.nodespace = nodespace
+    self.env = nodespace.get_environment()
     self.home = home
     self.full_name = full_name
 
@@ -265,12 +270,24 @@ class ConfigContext(object):
     rel_parent_path = rel_mkmk_path[:-1]
     full_name = self.full_name.append(*rel_parent_path)
     mkmk_home = full_mkmk.get_parent()
-    subcontext = ConfigContext(self.env, mkmk_home, full_name)
+    subcontext = ConfigContext(self.nodespace, mkmk_home, full_name)
     subcontext.load(full_mkmk)
 
   @export_to_build_scripts
   def include_dep(self, *rel_mkmk_path):
-    self.include('deps', *rel_mkmk_path)
+    rel_parent_path = rel_mkmk_path[:-1]
+    dep_name = rel_parent_path[0]
+    existing = self.env.get_dep(dep_name)
+    if not existing is None:
+      # This dep has already been loaded
+      return
+    full_mkmk = self.home.get_child('deps', *rel_mkmk_path)
+    full_name = self.full_name.append('deps', *rel_parent_path)
+    mkmk_home = full_mkmk.get_parent()
+    bindir = self.nodespace.bindir.get_child('deps', dep_name)
+    nodespace = self.env.create_dep(dep_name, mkmk_home, bindir)
+    subcontext = ConfigContext(nodespace, mkmk_home, Name.of())
+    subcontext.load(full_mkmk)
 
   # Returns a group node with the given name, creating it if it doesn't already
   # exist.
@@ -285,23 +302,28 @@ class ConfigContext(object):
   # problem we can solve if it ever becomes necessary.
   @export_to_build_scripts
   def get_external(self, *names):
-    return self.env.get_node(Name.of(*names))
+    return self.nodespace.get_node(Name.of(*names))
+
+  @export_to_build_scripts
+  def get_dep_external(self, name, *names):
+    nodespace = self.env.get_dep(name)
+    return nodespace.get_node(Name.of(*names))
 
   # Returns a file object representing the root of the source tree, that is,
   # the folder that contains the root .mkmk file.
   @export_to_build_scripts
   def get_root(self):
-    return self.env.get_root()
+    return self.nodespace.get_root()
 
   # Returns a file object representing the dependency with the given name.
   @export_to_build_scripts
   def get_dep(self, name):
-    return self.get_root().get_child('deps', name)
+    return self.env.get_dep(name).root
 
   # Returns a file object representing the root of the build output directory.
   @export_to_build_scripts
   def get_bindir(self):
-    return self.env.get_bindir()
+    return self.nodespace.get_bindir()
 
   # Returns the file object representing the file with the given path under the
   # current folder.
@@ -345,7 +367,7 @@ class ConfigContext(object):
     # Aliases have two names, one fully qualified and one just the basic name.
     alias = self.get_or_create_node(name, node.AliasNode)
     basic_name = Name.of(name)
-    self.env.add_node(basic_name, alias)
+    self.nodespace.add_node(basic_name, alias)
     for child in nodes:
       alias.add_member(child)
     return alias
@@ -355,7 +377,7 @@ class ConfigContext(object):
   # given arguments and registers the result under the given name.
   def get_or_create_node(self, name, Class, *args):
     node_name = self.get_full_name().append(name)
-    return self.env.get_or_create_node(node_name, Class, self, *args)
+    return self.nodespace.get_or_create_node(node_name, Class, self, *args)
 
   # Does the actual work of loading the mkmk file this context corresponds to.
   def load(self, mkmk_file):
@@ -374,30 +396,30 @@ class ConfigContext(object):
       full_out_name = self.get_full_name().append("%s.%s" %  (name, ext))
     else:
       full_out_name = self.get_full_name().append(name)
-    return self.env.get_bindir().get_child(*full_out_name.get_parts())
+    return self.nodespace.get_bindir().get_child(*full_out_name.get_parts())
 
   def __str__(self):
     return "Context(%s)" % self.home
 
 
-# The static environment that is shared and constant between all contexts and
-# across the lifetime of the build process. The environment is responsible for
-# keeping track of nodes and dependencies, and for providing the context-
-# independent functionality used by the contexts. Basically, the contexts expose
-# the environment's functionality to the tools and build scripts in a convenient
-# way, and the environment exposes the results of running those scripts to the
-# output generator.
-class Environment(object):
+# A space of node names. There can be multiple of these, one for the toplevel
+# config and one for each dependency. For each dependency there is a fresh
+# nodespace such that they can be built the same regardless of whether they
+# stand alone or have been imported. There is only one nodespace per dep name
+# though so if multiple dependencies import the same dependency only one will
+# actually be imported, the first to be encountered, and the rest will reuse it.
+class Nodespace(object):
 
-  def __init__(self, root, bindir, options):
+  def __init__(self, env, prefix, root, bindir):
+    self.env = env
+    self.nodes = {}
+    self.prefix = prefix
     self.root = root
     self.bindir = bindir
-    self.options = options
-    self.extension_names = options.extension
-    self.extensions = None
-    self.nodes = {}
-    self.custom_flags = None
-    self.system = None
+
+  # Returns the toplevel shared environment.
+  def get_environment(self):
+    return self.env
 
   # If there is already a node registered under the given name returns it,
   # otherwise creates and registers a new one by calling the given constructor
@@ -408,11 +430,13 @@ class Environment(object):
     new_node = Class(full_name.get_last_part(), *args)
     return self.add_node(full_name, new_node)
 
-  def is_noisy(self):
-    return self.options.noisy
-
   def add_node(self, full_name, node):
     self.nodes[full_name] = node
+    if self.prefix is None:
+      global_name = full_name
+    else:
+      global_name = full_name.prepend(self.prefix)
+    self.env.add_node(global_name, node)
     return node
 
   # Returns the node with the given full name, which must already exist.
@@ -426,6 +450,46 @@ class Environment(object):
   # Returns a handle to the binary output folder.
   def get_bindir(self):
     return self.bindir
+
+
+# The static environment that is shared and constant between all contexts and
+# across the lifetime of the build process. The environment is responsible for
+# keeping track of nodes and dependencies, and for providing the context-
+# independent functionality used by the contexts. Basically, the contexts expose
+# the environment's functionality to the tools and build scripts in a convenient
+# way, and the environment exposes the results of running those scripts to the
+# output generator.
+#
+# Note that there are two way of addressing nodes, the environment keeps track
+# of one and the nodespaces keep track of the other. The nodespaces keep track
+# of the names of nodes as seen by each dependency, and there can be multiple
+# nodes with the same name as long as they reside in different nodespaces. The
+# environment keeps track of all nodes globally and prefix the names by the
+# dependencies they live in, making them unique globally.
+class Environment(object):
+
+  def __init__(self, options):
+    self.options = options
+    self.extension_names = options.extension
+    self.extensions = None
+    self.custom_flags = None
+    self.system = None
+    self.all_nodes = {}
+    self.deps = {}
+
+  def is_noisy(self):
+    return self.options.noisy
+
+  def add_node(self, full_name, node):
+    self.all_nodes[full_name] = node
+
+  def get_dep(self, name):
+    return self.deps.get(name, None)
+
+  def create_dep(self, name, root, bindir):
+    result = Nodespace(self, name, root, bindir)
+    self.deps[name] = result
+    return result
 
   # Returns the parsed custom flags.
   def get_custom_flags(self):
@@ -486,7 +550,7 @@ class Environment(object):
       return " ".join([annot_to_string(k, v) for (k, v) in annots.items()])
     out.write("digraph G {\n")
     out.write("  rankdir=LR;\n")
-    for node in self.nodes.values():
+    for node in self.all_nodes.values():
       full_name = node.get_full_name()
       escaped = dot_escape(str(full_name))
       display_name = node.get_display_name()
@@ -506,7 +570,7 @@ class Environment(object):
   # given out stream.
   def write_makefile(self, out, bindir):
     makefile = Makefile()
-    for node in self.nodes.values():
+    for node in self.all_nodes.values():
       output_target = node.get_output_target()
       if not output_target:
         # If the node has no output target there's nothing to do to generate it.
@@ -580,9 +644,10 @@ class MkMkMakefile(object):
     root_mkmk = AbstractFile.at(self.options.config)
     root_mkmk_home = root_mkmk.get_parent()
     bindir = AbstractFile.at(self.options.bindir)
-    env = Environment(root_mkmk_home, bindir, self.options)
+    env = Environment(self.options)
     env.parse_custom_flags(self.options.buildflags)
-    context = ConfigContext(env, root_mkmk_home, Name.of())
+    nodespace = Nodespace(env, None, root_mkmk_home, bindir)
+    context = ConfigContext(nodespace, root_mkmk_home, Name.of())
     context.load(root_mkmk)
     makefile = self.options.makefile
     ensure_parent(makefile)
