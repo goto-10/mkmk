@@ -312,4 +312,8 @@ class AliasNode(GroupNode):
 
   # Unlike a normal group an alias causes a target to be generated.
   def get_output_target(self):
-    return self.get_name()
+    prefix = self.context.nodespace.get_prefix()
+    if prefix is None:
+      return self.get_name()
+    else:
+      return "%s_%s" % (prefix, self.get_name())

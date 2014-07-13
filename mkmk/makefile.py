@@ -439,6 +439,9 @@ class Nodespace(object):
     self.env.add_node(global_name, node)
     return node
 
+  def get_prefix(self):
+    return self.prefix
+
   # Returns the node with the given full name, which must already exist.
   def get_node(self, full_name):
     return self.nodes[full_name]
