@@ -14,6 +14,12 @@ import os.path
 class System(object):
   __metaclass__ = ABCMeta
 
+  def __init__(self, os):
+    self.os = os
+
+  def get_os(self):
+    return self.os
+
   # Returns the command for ensuring that the folder with the given name
   # exists.
   @abstractmethod
@@ -130,8 +136,8 @@ class WindowsSystem(System):
 
 def get(os):
   if os == 'posix':
-    return PosixSystem()
+    return PosixSystem(os)
   elif os == 'windows':
-    return WindowsSystem()
+    return WindowsSystem(os)
   else:
     raise AssertionError("Unknown system '%s'." % os)

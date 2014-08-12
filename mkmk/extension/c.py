@@ -45,7 +45,7 @@ class Toolchain(object):
 
   # Returns the command for compiling a set of object files into an executable.
   @abstractmethod
-  def get_executable_compile_command(self, output, inputs):
+  def get_executable_compile_command(self, output, inputs, libs):
     pass
 
 
@@ -89,7 +89,6 @@ class Gcc(Toolchain):
   def get_linker_flags(self):
     result = [
       "-rdynamic",
-      "-lrt",
       "-lstdc++",
     ]
     if self.config.gprof:
@@ -119,8 +118,9 @@ class Gcc(Toolchain):
   def get_object_file_ext(self):
     return "o"
 
-  def get_executable_compile_command(self, output, inputs):
+  def get_executable_compile_command(self, output, inputs, libs):
     linkflags = self.get_linker_flags()
+    linkflags += ["-l%s" % lib for lib in libs]
     command = "$(CC) -o %(output)s %(inputs)s %(linkflags)s" % {
       "output": shell_escape(output),
       "inputs": " ".join(map(shell_escape, inputs)),
@@ -224,7 +224,7 @@ class MSVC(Toolchain):
   def get_object_file_ext(self):
     return "obj"
 
-  def get_executable_compile_command(self, output, inputs):
+  def get_executable_compile_command(self, output, inputs, libs):
     command = "$(CC) /nologo /Fe%(output)s %(inputs)s" % {
       "output": shell_escape(output),
       "inputs": " ".join(map(shell_escape, inputs))
@@ -307,7 +307,12 @@ class ExecutableNode(AbstractNode):
   def get_command_line(self, platform):
     outpath = self.get_output_path()
     inpaths = self.get_input_paths(obj=True)
-    return self.get_toolchain().get_executable_compile_command(outpath, inpaths)
+    all_libs = set()
+    for obj in self.get_input_nodes():
+      libs = obj.get_libraries(platform)
+      all_libs = all_libs.union(libs)
+    return self.get_toolchain().get_executable_compile_command(outpath, inpaths,
+        sorted(all_libs))
 
   def get_run_command_line(self, platform):
     flags = self.get_tools().get_custom_flags()
@@ -479,15 +484,26 @@ class CSourceNode(AbstractNode):
 
 # A node representing a built object file.
 class ObjectNode(AbstractNode):
-  
+
   def __init__(self, name, context, source, is_cpp):
     super(ObjectNode, self).__init__(name, context, source.get_tools())
     self.add_dependency(source, src=True)
     self.source = source
     self.is_cpp = is_cpp
+    self.libraries = {}
 
   def get_source(self):
     return self.source
+
+  def add_library_requirement(self, **kwargs):
+    for (platform, value) in kwargs.items():
+      if not platform in self.libraries:
+        self.libraries[platform] = set()
+      self.libraries[platform].add(value)
+
+  def get_libraries(self, platform):
+    os = platform.get_os()
+    return self.libraries.get(os, [])
 
   def get_output_file(self):
     source_name = self.get_source().get_name()
