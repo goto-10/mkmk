@@ -178,6 +178,7 @@ class MSVC(Toolchain):
       "/wd4735", # Storing 64-bit float result in memory
       "/wd4710", # Function not inlined
       "/wd4738", # Storing 32-bit float result in memory
+      "/wd4121", # Alignment of member was sensitive to packing
 
       # Maybe look into fixing these?
       "/wd4244", # Possibly lossy conversion from int64 to int32
