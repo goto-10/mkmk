@@ -22,7 +22,7 @@ _VERSION = 2
 # Returns the default value to use for the language.
 def get_default_shell():
   system = platform.system()
-  if system == "Linux":
+  if system in ["Linux", "Darwin"]:
     return "sh"
   elif system == "Windows":
     return "bat"
@@ -116,3 +116,6 @@ def main():
   except KeyboardInterrupt, ki:
     logging.info("Interrupted; exiting.")
     sys.exit(1)
+
+if __name__ == "__main__":
+  main()

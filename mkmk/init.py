@@ -177,6 +177,7 @@ def generate_build_script(version, mkmk, flags, variant_flags):
   cond_flags = []
   if flags.noisy:
     cond_flags.append('--noisy')
+  cond_flags += ['--system', flags.system]
   makefile_src = template % {
     "version": version,
     "init_tool": mkmk,

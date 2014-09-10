@@ -135,7 +135,7 @@ class WindowsSystem(System):
 
 
 def get(os):
-  if os == 'posix':
+  if (os == 'posix') or (os == 'mac'):
     return PosixSystem(os)
   elif os == 'windows':
     return WindowsSystem(os)
