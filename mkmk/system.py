@@ -78,6 +78,11 @@ class PosixSystem(System):
           "name": name,
           "value": value
         })
+      elif mode == "replace":
+        envs.append("%(name)s=%(value)s" % {
+          "name": name,
+          "value": value
+        })
       else:
         raise Exception("Unknown mode %s" % mode)
     return "%s %s" % (" ".join(envs), command)
@@ -121,6 +126,11 @@ class WindowsSystem(System):
     for (name, value, mode) in env:
       if mode == "append":
         envs.append("set %(name)s=%%%(name)s%%;%(value)s" % {
+          "name": name,
+          "value": value
+        })
+      elif mode == "replace":
+        envs.append("set %(name)s=%(value)s" % {
           "name": name,
           "value": value
         })

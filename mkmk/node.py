@@ -148,7 +148,7 @@ class PhysicalNode(Node):
 # A "dumb" node representing a file. If you need any kind of file type specific
 # behavior use a subclass of PhysicalNode instead.
 class FileNode(PhysicalNode):
-  
+
   def __init__(self, name, context, handle):
     super(FileNode, self).__init__(name, context)
     self.handle = handle
@@ -167,6 +167,7 @@ class CustomExecNode(PhysicalNode):
     super(CustomExecNode, self).__init__(name, context)
     self.subject = subject
     self.args = []
+    self.env = []
     self.title = None
 
   def get_output_file(self):
@@ -177,6 +178,8 @@ class CustomExecNode(PhysicalNode):
     outpath = self.get_output_path()
     args = " ".join(self.get_arguments())
     raw_command_line = "%s %s" % (runner, args)
+    if len(self.env) > 0:
+      raw_command_line = system.run_with_environment(raw_command_line, self.env)
     if self.should_tee_output():
       result = system.get_safe_tee_command(raw_command_line, outpath)
     else:
@@ -210,6 +213,10 @@ class CustomExecNode(PhysicalNode):
   # Sets the (string) arguments to pass to the runner.
   def set_arguments(self, *args):
     self.args = args
+    return self
+
+  def add_env(self, key, value):
+    self.env.append((key, value, "replace"))
     return self
 
   # Returns the argument list to pass when executing this node.

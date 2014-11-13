@@ -30,6 +30,14 @@ def get_default_shell():
     return None
 
 
+_DEFAULT_SYSTEMS = {
+  "Windows": "windows",
+  "Darwin": "mac"
+}
+def get_default_system():
+  return _DEFAULT_SYSTEMS.get(platform.system(), "posix")
+
+
 # The main entry-point class.
 class MkMk(object):
 
@@ -59,7 +67,7 @@ class MkMk(object):
       help='Name of the build script to generate')
     parser.add_argument('--before', default=None,
       help='Version to compare with when running has_changed')
-    parser.add_argument('--system', default='posix',
+    parser.add_argument('--system', default=get_default_system(),
       help='The system/os we\'re building on')
     return parser
 
