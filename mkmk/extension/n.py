@@ -23,7 +23,7 @@ class NSourceNode(node.PhysicalNode):
 
 # A node representing a neutrino binary built by the python neutrino compiler.
 class NBinary(node.PhysicalNode):
-  
+
   # Adds a source file that should be included in this library.
   def add_source(self, node):
     self.add_dependency(node, src=True)
@@ -53,18 +53,15 @@ class NLibrary(NBinary):
     return "nl"
 
   def get_command_line(self, system):
-    import plankton.options
     [compiler_node] = self.get_input_nodes(compiler=True)
     manifests = self.get_input_paths(manifest=True)
     compile_command_line = compiler_node.get_run_command_line(system)
     outpath = self.get_output_path()
-    options = plankton.options.Options()
-    build_library = {
+    options = "{ --build_library { --out \"%(out)s\" --modules [ %(modules)s ] } }" % {
       "out": outpath,
-      "modules": manifests
+      "modules": " ".join(["\"%s\"" % m for m in manifests])
     }
-    options.add_flag("build-library", build_library)
-    command = "%s --compile %s" % (compile_command_line, options.base64_encode())
+    command = "%s --compile %s" % (compile_command_line, options)
     return Command(command)
 
 
@@ -80,16 +77,14 @@ class NProgram(NBinary):
     return self
 
   def get_command_line(self, system):
-    import plankton.options
     [compiler_node] = self.get_input_nodes(compiler=True)
     compile_command_line = compiler_node.get_run_command_line(system)
     outpath = self.get_output_path()
     [file] = self.get_input_paths(src=True)
     modules = self.get_input_paths(module=True)
-    options = plankton.options.Options()
-    options.add_flag("modules", modules)
-    command = "%s --file %s --compile %s --out %s" % (compile_command_line, file,
-      options.base64_encode(), outpath)
+    options = "--compile { --modules[ %s ] }" % " ".join(["\"%s\"" % m for m in modules])
+    command = "%s --files[ \"%s\" ] %s --out \"%s\"" % (compile_command_line, file,
+      options, outpath)
     return Command(command)
 
 
