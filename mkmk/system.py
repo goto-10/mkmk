@@ -74,7 +74,7 @@ class PosixSystem(System):
     envs = []
     for (name, value, mode) in env:
       if mode == "append":
-        envs.append("%(name)s=$%(name)s:%(value)s" % {
+        envs.append("%(name)s=$$%(name)s:%(value)s" % {
           "name": name,
           "value": value
         })

@@ -319,7 +319,10 @@ class ExecutableNode(AbstractNode):
     flags = self.get_tools().get_custom_flags()
     exec_command = [self.get_output_file().get_path()]
     if flags.valgrind:
-      exec_command = _VALGRIND_COMMAND + exec_command
+      valgrind_prefix = _VALGRIND_COMMAND
+      for flag in flags.valgrind_flag:
+        valgrind_prefix = valgrind_prefix + ["--%s" % flag]
+      exec_command = valgrind_prefix + exec_command
     if flags.time:
       exec_command = _TIME_COMMAND + exec_command
     return " ".join(map(shell_escape, exec_command))
@@ -608,6 +611,8 @@ class CController(extend.ToolController):
       help='Don\'t fail compilation on warnings')
     parser.add_argument('--valgrind', action='store_true', default=False,
       help='Run under valgrind')
+    parser.add_argument('--valgrind-flag', action='append', default=[],
+      help='Additional flag to pass to valgrind. A "--" will be prepended.')
     parser.add_argument('--time', action='store_true', default=False,
       help='Print timing information when running tests')
 
