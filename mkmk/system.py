@@ -5,9 +5,10 @@
 # Code that controls how the build works on different platforms.
 
 
-from command import Command, shell_escape
 from abc import ABCMeta, abstractmethod
+from command import Command, shell_escape
 import os.path
+import re
 
 
 # A system is a set of tools used to interact with the current platform etc.
@@ -36,7 +37,7 @@ class System(object):
   # Returns a command the executes the given command in an environment augmented
   # with the given bindings.
   @abstractmethod
-  def run_with_environment(self, command, env):
+  def run_with_environment(self, command, env, args=[]):
     pass
 
   # Returns a command that recursively removes the given folder without failing
@@ -70,9 +71,11 @@ class PosixSystem(System):
     comment = "Running %(command_line)s" % params
     return Command(*[part % params for part in parts])
 
-  def run_with_environment(self, command, env):
+  def run_with_environment(self, command, env, args=[]):
     envs = []
     for (name, value, mode) in env:
+      if type(value) == list:
+        value = ":".join(value)
       if mode == "append":
         envs.append("%(name)s=$$%(name)s:%(value)s" % {
           "name": name,
@@ -85,13 +88,16 @@ class PosixSystem(System):
         })
       else:
         raise Exception("Unknown mode %s" % mode)
-    return "%s %s" % (" ".join(envs), command)
+    return "%s %s %s" % (" ".join(envs), command, " ".join(args))
 
   def get_copy_command(self, source, target):
     command = "cp %s %s" % (shell_escape(source), shell_escape(target))
     comment = "Copying to '%s'" % target
     return Command(command).set_comment(comment)
 
+
+def cmd_escape(str):
+  return str.replace("\"", "\\\"")
 
 class WindowsSystem(System):
 
@@ -110,7 +116,7 @@ class WindowsSystem(System):
 
   def get_safe_tee_command(self, command_line, outpath):
     params = {
-      "command_line": command_line,
+      "command_line": command_line.replace("\\", "\\\\"),
       "outpath": outpath
     }
     parts = [
@@ -121,9 +127,11 @@ class WindowsSystem(System):
     comment = "Running %(command_line)s" % params
     return Command(*[part % params for part in parts])
 
-  def run_with_environment(self, command, env):
+  def run_with_environment(self, command, env, args=[]):
     envs = []
     for (name, value, mode) in env:
+      if type(value) == list:
+        value = ";".join(value)
       if mode == "append":
         envs.append("set %(name)s=%%%(name)s%%;%(value)s" % {
           "name": name,
@@ -136,7 +144,8 @@ class WindowsSystem(System):
         })
       else:
         raise Exception("Unknown mode %s" % mode)
-    return "cmd /c \"%s && %s\"" % (" && ".join(envs), command)
+    subcommand = "%s %s" % (command, " ".join(args))
+    return "cmd /c \"%s && %s\"" % (" && ".join(envs), cmd_escape(subcommand))
 
   def get_copy_command(self, source, target):
     command = "copy %s %s" % (shell_escape(source), shell_escape(target))

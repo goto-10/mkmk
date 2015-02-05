@@ -24,12 +24,12 @@ class PythonSourceNode(node.PhysicalNode):
     self.pythonpath.add(handle.get_path())
     return self
 
-  def get_run_command_line(self, platform):
+  def get_run_command_line(self, platform, args=[]):
     command = "python -B %s" % self.handle.get_path()
     if self.pythonpath:
-      pythonpath = ":".join(sorted(list(self.pythonpath)))
+      pythonpath = sorted(list(self.pythonpath))
       env = [("PYTHONPATH", pythonpath, "append")]
-      return platform.run_with_environment(command, env)
+      return platform.run_with_environment(command, env, args)
     else:
       return command
 

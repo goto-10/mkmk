@@ -182,7 +182,7 @@ class MSVC(Toolchain):
 
       # Maybe look into fixing these?
       "/wd4244", # Possibly lossy conversion from int64 to int32
-      "/wd4242", # Possibly lossy conversion from int32 to int8 
+      "/wd4242", # Possibly lossy conversion from int32 to int8
       "/wd4146", # Unary minus applied to unsigned
       "/wd4996", # Function may be unsafe
       "/wd4826", # Conversion is sign-extended
@@ -309,7 +309,7 @@ class ExecutableNode(AbstractNode):
     outpath = self.get_output_path()
     inpaths = self.get_input_paths(obj=True)
     all_libs = set()
-    for obj in self.get_input_nodes():
+    for obj in self.get_input_nodes(obj=True):
       libs = obj.get_libraries(platform)
       all_libs = all_libs.union(libs)
     return self.get_toolchain().get_executable_compile_command(outpath, inpaths,
@@ -432,7 +432,7 @@ class CSourceNode(AbstractNode):
     if self.headers is None:
       self.headers = self.calc_included_headers()
     return self.headers
-  
+
   # Calculates the list of handles of files included by this source file.
   def calc_included_headers(self):
     headers = set()

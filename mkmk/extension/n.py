@@ -55,13 +55,12 @@ class NLibrary(NBinary):
   def get_command_line(self, system):
     [compiler_node] = self.get_input_nodes(compiler=True)
     manifests = self.get_input_paths(manifest=True)
-    compile_command_line = compiler_node.get_run_command_line(system)
     outpath = self.get_output_path()
-    options = "{ --build_library { --out \"%(out)s\" --modules [ %(modules)s ] } }" % {
+    options = "--compile { --build_library { --out \"%(out)s\" --modules [ %(modules)s ] } }" % {
       "out": outpath,
       "modules": " ".join(["\"%s\"" % m for m in manifests])
     }
-    command = "%s --compile %s" % (compile_command_line, options)
+    command = compiler_node.get_run_command_line(system, [options])
     return Command(command)
 
 
@@ -78,13 +77,15 @@ class NProgram(NBinary):
 
   def get_command_line(self, system):
     [compiler_node] = self.get_input_nodes(compiler=True)
-    compile_command_line = compiler_node.get_run_command_line(system)
     outpath = self.get_output_path()
     [file] = self.get_input_paths(src=True)
     modules = self.get_input_paths(module=True)
-    options = "--compile { --modules[ %s ] }" % " ".join(["\"%s\"" % m for m in modules])
-    command = "%s --files[ \"%s\" ] %s --out \"%s\"" % (compile_command_line, file,
-      options, outpath)
+    options = "--files[ \"%(files)s\" ] --compile{ --modules[ %(modules)s ] } --out \"%(out)s\"" % {
+      "modules": " ".join(["\"%s\"" % m for m in modules]),
+      "files": file,
+      "out": outpath
+    }
+    command = compiler_node.get_run_command_line(system, [options])
     return Command(command)
 
 
