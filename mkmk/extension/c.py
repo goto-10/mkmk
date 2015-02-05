@@ -196,6 +196,8 @@ class MSVC(Toolchain):
     # Checks en/dis-abled
     if self.config.checks:
       result += ["/DENABLE_CHECKS=1"]
+    if self.config.expchecks:
+      result += ["/DEXPENSIVE_CHECKS=1"]
     # Strict errors
     if not self.config.warn:
       result += ["/WX"]
