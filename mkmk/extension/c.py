@@ -309,7 +309,7 @@ class ExecutableNode(AbstractNode):
 
   def get_command_line(self, platform):
     outpath = self.get_output_path()
-    inpaths = self.get_input_paths(obj=True)
+    inpaths = sorted(set(self.get_input_paths(obj=True)))
     all_libs = set()
     for obj in self.get_input_nodes(obj=True):
       libs = obj.get_libraries(platform)
