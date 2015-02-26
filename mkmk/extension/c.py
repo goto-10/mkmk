@@ -70,7 +70,14 @@ class Gcc(Toolchain):
       result += ["-Wno-unused-local-typedefs"]
     # Debug flags
     if self.config.debug:
-      result += ["-O0", "-g"]
+      if self.config.gcc48:
+        # This one is new in gcc48 but is made to be used with -g
+        result += ["-Og"]
+      else:
+        # Otherwise we'll err on the side of performance, -O0 is just too slow
+        # especially when used with valgrind.
+        result += ["-O1"]
+      result += ["-g"]
     else:
       result += ["-O3"]
     # Profiling
