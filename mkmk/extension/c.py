@@ -68,18 +68,21 @@ class Gcc(Toolchain):
     # Annoyingly this warning option only exists in gcc > 4.8 and not in clang.
     if self.config.gcc48:
       result += ["-Wno-unused-local-typedefs"]
+    optflag = "-O3"
     # Debug flags
     if self.config.debug:
+      result += ["-g"]
       if self.config.gcc48:
         # This one is new in gcc48 but is made to be used with -g
-        result += ["-Og"]
+        optflag = "-Og"
       else:
         # Otherwise we'll err on the side of performance, -O0 is just too slow
         # especially when used with valgrind.
-        result += ["-O1"]
-      result += ["-g"]
-    else:
-      result += ["-O3"]
+        optflag = "-O1"
+    if self.config.fastcompile:
+      # Fastcompile overrides everything.
+      optflag = "-O0"
+    result += [optflag]
     # Profiling
     if self.config.gprof:
       result += ["-pg"]
@@ -624,6 +627,8 @@ class CController(extend.ToolController):
       help='Additional flag to pass to valgrind. A "--" will be prepended.')
     parser.add_argument('--time', action='store_true', default=False,
       help='Print timing information when running tests')
+    parser.add_argument('--fastcompile', action='store_true', default=False,
+      help='Compile as fast as possible, likely causing slower runtime')
 
 
 # Entry-point used by the framework to get the controller for the given env.

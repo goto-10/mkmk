@@ -195,3 +195,4 @@ def generate_build_script(version, mkmk, flags, variant_flags):
   import stat
   st = os.stat(filename)
   os.chmod(filename, st.st_mode | stat.S_IEXEC)
+  return filename

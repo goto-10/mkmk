@@ -6,11 +6,13 @@
 
 from command import Command, shell_escape
 import argparse
+import logging
 import node
 import os
 import os.path
 import platform
 import re
+import subprocess
 import sys
 
 
@@ -43,6 +45,12 @@ class MkMk(object):
 
   def __init__(self, args):
     parser = self.build_option_parser()
+    if "--" in args:
+      index = args.index("--")
+      self.extras = args[index+1:]
+      args = args[0:index]
+    else:
+      self.extras = []
     (self.options, self.unknown) = parser.parse_known_args(args)
 
   # Parse the options shared between all the different handers.
@@ -93,7 +101,12 @@ class MkMk(object):
   def handle_init(self):
     import init
     mkmk = sys.argv[0]
-    init.generate_build_script(_VERSION, mkmk, self.options, self.unknown)
+    return init.generate_build_script(_VERSION, mkmk, self.options, self.unknown)
+
+  def handle_run(self):
+    script = self.handle_init()
+    command = [script] + self.extras
+    return subprocess.check_call(command)
 
   # Checks whether the contents of this script still MD5-hashes to the given
   # value.
@@ -122,7 +135,10 @@ def main():
   try:
     mkmk.run()
   except KeyboardInterrupt, ki:
-    logging.info("Interrupted; exiting.")
+    logging.error("Interrupted; exiting.")
+    sys.exit(1)
+  except subprocess.CalledProcessError, ce:
+    logging.error("%s", ce)
     sys.exit(1)
 
 if __name__ == "__main__":
