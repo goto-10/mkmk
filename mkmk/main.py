@@ -77,6 +77,8 @@ class MkMk(object):
       help='Version to compare with when running has_changed')
     parser.add_argument('--system', default=get_default_system(),
       help='The system/os we\'re building on')
+    parser.add_argument('--self', default=None,
+      help='Optional argument specifying how to run mkmk.')
     return parser
 
   # Returns a map from handler names to handlers.
@@ -100,7 +102,7 @@ class MkMk(object):
 
   def handle_init(self):
     import init
-    mkmk = sys.argv[0]
+    mkmk = self.options.self or sys.argv[0]
     return init.generate_build_script(_VERSION, mkmk, self.options, self.unknown)
 
   def handle_run(self):
