@@ -64,7 +64,10 @@ class Gcc(Toolchain):
     if is_cpp:
       result += ["-Wno-invalid-offsetof"]
     else:
-      result += ["-std=c99"]
+      result += [
+        "-std=c99",
+        "-Wc++-compat"  # Consistency with msvc which compiles C as C++.
+      ]
     # Annoyingly this warning option only exists in gcc > 4.8 and not in clang.
     if self.config.gcc48:
       result += ["-Wno-unused-local-typedefs"]
