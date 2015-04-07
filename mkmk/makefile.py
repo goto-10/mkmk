@@ -131,7 +131,13 @@ class AbstractFile(object):
   # Returns the folder that contains this file.
   def get_parent(self):
     if self.parent is None:
-      self.parent = AbstractFile.at(os.path.dirname(self.path))
+      dirname = os.path.dirname(self.path)
+      if (not dirname) and os.path.isfile(self.path):
+        # If this file is a naked file ("foo.mkmk" say) then we take the parent
+        # to be the relative current directory since that's where the file is
+        # assumed to be.
+        dirname = "."
+      self.parent = AbstractFile.at(dirname)
     return self.parent
 
   # Returns a file representing the child under this folder with the given path.
