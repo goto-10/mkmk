@@ -250,7 +250,7 @@ class MSVC(Toolchain):
     command = "$(CC) %(cflags)s /Fe%(output)s %(inputs)s" % {
       "output": shell_escape(output),
       "inputs": " ".join(map(shell_escape, inputs)),
-      "flags": " ".join(cflags)
+      "cflags": " ".join(cflags)
     }
     comment = "Building executable %s" % os.path.basename(output)
     return Command(command).set_comment(comment)
