@@ -60,6 +60,7 @@ class Gcc(Toolchain):
       "-Wno-unused-function",       # Not all header functions are used in all.
                                     #   the files that include them.
       "-fPIC",
+      "-Wconversion"
     ]
     if is_cpp:
       result += ["-Wno-invalid-offsetof"]
@@ -227,6 +228,8 @@ class MSVC(Toolchain):
         option = "Tp"
       return "/%s%s" % (option, shell_escape(path))
     cflags = ["/c"] + self.get_config_flags()
+    if self.config.debug:
+      cflags += ["/Fd%s.pdb" % shell_escape(output)]
     for path in includepaths:
       cflags.append("/I%s" % shell_escape(path))
     command = "$(CC) %(cflags)s /Fo%(output)s %(inputs)s" % {
@@ -241,9 +244,13 @@ class MSVC(Toolchain):
     return "obj"
 
   def get_executable_compile_command(self, output, inputs, libs):
-    command = "$(CC) /nologo /Fe%(output)s %(inputs)s" % {
+    cflags = ["/nologo"]
+    if self.config.debug:
+      cflags += ["/Zi", "/Fd%s.pdb" % shell_escape(output)]
+    command = "$(CC) %(cflags)s /Fe%(output)s %(inputs)s" % {
       "output": shell_escape(output),
-      "inputs": " ".join(map(shell_escape, inputs))
+      "inputs": " ".join(map(shell_escape, inputs)),
+      "flags": " ".join(cflags)
     }
     comment = "Building executable %s" % os.path.basename(output)
     return Command(command).set_comment(comment)
