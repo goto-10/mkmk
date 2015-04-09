@@ -59,8 +59,12 @@ class Gcc(Toolchain):
       "-Wno-unused-parameter",      # Sometime you don't need all the params.
       "-Wno-unused-function",       # Not all header functions are used in all.
                                     #   the files that include them.
+      "-Wconversion",               # Check conversions aggressively to match
+                                    #   msvc.
+      "-Wno-sign-conversion",       # Not sign conversions though, they're all
+                                    #   over the place and warning on them
+                                    #   doesn't seem helpful.
       "-fPIC",
-      "-Wconversion"
     ]
     if is_cpp:
       result += ["-Wno-invalid-offsetof"]
