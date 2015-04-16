@@ -28,9 +28,10 @@ class MakefileTarget(object):
 
   # Write this target, in Makefile syntax, to the given output stream.
   def write(self, out):
+    raw_inputs = sorted(set(self.inputs))
     out.write("%(outpath)s: %(inpaths)s\n\t%(commands)s\n\n" % {
       "outpath": shell_escape(self.output),
-      "inpaths": " ".join(map(shell_escape, self.inputs)),
+      "inpaths": " ".join(map(shell_escape, raw_inputs)),
       "commands": "\n\t".join(self.commands)
     })
 

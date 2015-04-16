@@ -385,7 +385,7 @@ class SharedLibraryNode(AbstractNode):
 
   def get_command_line(self, platform):
     outpath = self.get_output_path()
-    inpaths = self.get_input_paths(obj=True)
+    inpaths = sorted(set(self.get_input_paths(obj=True)))
     libs = self.get_libraries()
     return self.get_toolchain().get_shared_library_compile_command(outpath, inpaths, libs)
 
