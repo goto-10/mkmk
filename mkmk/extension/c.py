@@ -104,7 +104,7 @@ class Gcc(Toolchain):
       result += ["-Werror"]
     return result
 
-  def get_linker_flags(self):
+  def get_base_linker_flags(self):
     result = [
       "-rdynamic",
       "-lstdc++",
@@ -112,6 +112,11 @@ class Gcc(Toolchain):
     if self.config.gprof:
       result += ["-pg"]
     return result
+
+  # Returns the set of linker flags to pass when linking, given a list of the
+  # libraries to link with.
+  def get_linker_flags(self, libs):
+    return self.get_base_linker_flags() + ["-l%s" % lib for lib in libs]
 
   def get_object_compile_command(self, output, inputs, includepaths, defines,
       is_cpp, force_c):
@@ -137,8 +142,7 @@ class Gcc(Toolchain):
     return "o"
 
   def get_executable_compile_command(self, output, inputs, libs):
-    linkflags = self.get_linker_flags()
-    linkflags += ["-l%s" % lib for lib in libs]
+    linkflags = self.get_linker_flags(libs)
     command = "$(CC) -o %(output)s %(inputs)s %(linkflags)s" % {
       "output": shell_escape(output),
       "inputs": " ".join(map(shell_escape, inputs)),
@@ -148,7 +152,7 @@ class Gcc(Toolchain):
     return Command(command).set_comment(comment)
 
   def get_shared_library_compile_command(self, output, inputs, libs):
-    linkflags = self.get_linker_flags()
+    linkflags = self.get_linker_flags(libs)
     command = "$(CC) -shared -o %(output)s %(inputs)s %(linkflags)s" % {
       "output": shell_escape(output),
       "inputs": " ".join(map(shell_escape, inputs)),
@@ -313,6 +317,15 @@ class AbstractNode(node.PhysicalNode):
   def get_toolchain(self):
     return self.get_tools().get_toolchain()
 
+  # Returns the shared libraries required by an object in this node's set of
+  # dependencies.
+  def get_object_libraries(self, platform):
+    all_libs = set()
+    for obj in self.get_input_nodes(obj=True):
+      libs = obj.get_libraries(platform)
+      all_libs = all_libs.union(libs)
+    return sorted(all_libs)
+
 
 # A build dependency node that represents an executable.
 class ExecutableNode(AbstractNode):
@@ -334,12 +347,9 @@ class ExecutableNode(AbstractNode):
   def get_command_line(self, platform):
     outpath = self.get_output_path()
     inpaths = sorted(set(self.get_input_paths(obj=True)))
-    all_libs = set()
-    for obj in self.get_input_nodes(obj=True):
-      libs = obj.get_libraries(platform)
-      all_libs = all_libs.union(libs)
+    obj_libs = self.get_object_libraries(platform)
     return self.get_toolchain().get_executable_compile_command(outpath, inpaths,
-        sorted(all_libs))
+        obj_libs)
 
   def get_run_command_line(self, platform):
     flags = self.get_tools().get_custom_flags()
@@ -380,13 +390,14 @@ class SharedLibraryNode(AbstractNode):
     self.libraries.add(file.get_path())
 
   # Returns the sorted list of libraries to link with.
-  def get_libraries(self):
-    return sorted(list(self.libraries))
+  def get_libraries(self, platform):
+    all_libs = self.get_object_libraries(platform) + list(self.libraries)
+    return sorted(list(all_libs))
 
   def get_command_line(self, platform):
     outpath = self.get_output_path()
     inpaths = sorted(set(self.get_input_paths(obj=True)))
-    libs = self.get_libraries()
+    libs = self.get_libraries(platform)
     return self.get_toolchain().get_shared_library_compile_command(outpath, inpaths, libs)
 
 
