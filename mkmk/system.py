@@ -133,12 +133,12 @@ class WindowsSystem(System):
       if type(value) == list:
         value = ";".join(value)
       if mode == "append":
-        envs.append("set %(name)s=%%%(name)s%%;%(value)s" % {
+        envs.append("set \"%(name)s=%%%(name)s%%\;%(value)s\"" % {
           "name": name,
           "value": value
         })
       elif mode == "replace":
-        envs.append("set %(name)s=%(value)s" % {
+        envs.append("set \"%(name)s=%(value)s\"" % {
           "name": name,
           "value": value
         })
