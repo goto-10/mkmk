@@ -29,7 +29,6 @@ class Command(object):
       parts = ["@echo '%s'" % self.comment] + parts
     return parts
 
-
 # Escapes a string such that it can be passed as an argument in a shell command.
 def shell_escape(s):
-  return re.sub(r'([\s()])', r"\\\g<1>", s)
+  return re.sub(r'([\s()\\])', r"\\\g<1>", s)

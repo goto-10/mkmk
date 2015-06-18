@@ -24,14 +24,13 @@ class PythonSourceNode(node.PhysicalNode):
     self.pythonpath.add(handle.get_path())
     return self
 
-  def get_run_command_line(self, platform, args=[]):
-    command = "python -B %s" % self.handle.get_path()
+  def get_run_command_builder(self, platform, args=[]):
+    builder = platform.new_command_builder("python", "-B", self.handle.get_path(), *args)
     if self.pythonpath:
       pythonpath = sorted(list(self.pythonpath))
       env = [("PYTHONPATH", pythonpath, "append")]
-      return platform.run_with_environment(command, env, args)
-    else:
-      return command
+      builder.add_env(env)
+    return builder
 
 
 # The tools for working with python. Available in mkmk files as "py".

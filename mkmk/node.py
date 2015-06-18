@@ -156,8 +156,8 @@ class FileNode(PhysicalNode):
   def get_input_file(self):
     return self.handle
 
-  def get_run_command_line(self, platform):
-    return self.handle.get_path()
+  def get_run_command_builder(self, platform):
+    return platform.new_command_builder(self.handle.get_path())
 
 
 # A node representing the execution of a custom command.
@@ -174,27 +174,23 @@ class CustomExecNode(PhysicalNode):
     return self.get_context().get_outdir_file(self.subject)
 
   def get_command_line(self, system):
-    runner = self.get_runner_command(system)
-    outpath = self.get_output_path()
-    args = " ".join(self.get_arguments())
-    raw_command_line = "%s %s" % (runner, args)
-    if len(self.env) > 0:
-      raw_command_line = system.run_with_environment(raw_command_line, self.env)
-    if self.should_tee_output():
-      result = system.get_safe_tee_command(raw_command_line, outpath)
-    else:
-      result = Command(raw_command_line)
-    if self.title is None:
-      title = "Running %s" % self.get_full_name()
-    else:
+    if self.title:
       title = self.title
-    result.set_comment(title)
-    return result
+    else:
+      title = "Running %s" % self.get_full_name()
+    builder = (self.get_run_command_builder(system)
+        .add_arguments(self.get_arguments())
+        .add_env(self.env)
+        .set_comment(title))
+    if self.should_tee_output():
+      outpath = self.get_output_path()
+      builder.set_tee_destination(outpath)
+    return builder.build()
 
   # Returns the executable to run.
-  def get_runner_command(self, platform):
+  def get_run_command_builder(self, platform):
     [runner_node] = self.get_input_nodes(runner=True)
-    return runner_node.get_run_command_line(platform)
+    return runner_node.get_run_command_builder(platform)
 
   # Should the contents of the output file be printed on successful completion?
   def should_tee_output(self):
@@ -229,14 +225,14 @@ class SystemExecNode(CustomExecNode):
 
   def __init__(self, name, context, subject):
     super(SystemExecNode, self).__init__(name, context, subject)
-    self.command = None
+    self.executable = None
 
-  def set_command(self, command):
-    self.command = command
+  def set_executable(self, executable):
+    self.executable = executable
     return self
 
-  def get_runner_command(self, platform):
-    return self.command
+  def get_run_command_builder(self, platform):
+    return platform.new_command_builder(self.executable)
 
 
 # Copies the source file to the target.

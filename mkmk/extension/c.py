@@ -12,9 +12,7 @@ from .. import extend
 from .. import node
 import re
 
-_VALGRIND_COMMAND = [
-  "valgrind", "-q", "--leak-check=full", "--error-exitcode=1"
-]
+_VALGRIND_COMMAND = ("valgrind", ["-q", "--leak-check=full", "--error-exitcode=1"])
 
 _TIME_COMMAND = [
   "/usr/bin/time", "-f", "[Time: E%E U%U S%S]"
@@ -351,17 +349,16 @@ class ExecutableNode(AbstractNode):
     return self.get_toolchain().get_executable_compile_command(outpath, inpaths,
         obj_libs)
 
-  def get_run_command_line(self, platform):
+  def get_run_command_builder(self, platform):
+    executable = self.get_output_file().get_path()
+    args = []
     flags = self.get_tools().get_custom_flags()
-    exec_command = [self.get_output_file().get_path()]
     if flags.valgrind:
-      valgrind_prefix = _VALGRIND_COMMAND
-      for flag in flags.valgrind_flag:
-        valgrind_prefix = valgrind_prefix + ["--%s" % flag]
-      exec_command = valgrind_prefix + exec_command
-    if flags.time:
-      exec_command = _TIME_COMMAND + exec_command
-    return " ".join(map(shell_escape, exec_command))
+      (vexec, vargs) = _VALGRIND_COMMAND
+      extra_args = ["--%s" % flag for flag in flags.valgrind_flag]
+      args = vargs + extra_args + [executable]
+      executable = vexec
+    return platform.new_command_builder(executable, *args)
 
 
 # A build dependency node that represents a shared library.

@@ -54,14 +54,11 @@ class NLibrary(NBinary):
 
   def get_command_line(self, system):
     [compiler_node] = self.get_input_nodes(compiler=True)
-    manifests = self.get_input_paths(manifest=True)
+    manifests = ['"%s"' % m for m in self.get_input_paths(manifest=True)]
     outpath = self.get_output_path()
-    options = "--compile { --build_library { --out \"%(out)s\" --modules [ %(modules)s ] } }" % {
-      "out": outpath,
-      "modules": " ".join(["\"%s\"" % m for m in manifests])
-    }
-    command = compiler_node.get_run_command_line(system, [options])
-    return Command(command)
+    options = ["--compile", "{", "--build_library", "{", "--out", '"%s"' % outpath,
+        "--modules", "["] + manifests + ["]", "}", "}"]
+    return compiler_node.get_run_command_builder(system, options).build()
 
 
 # A neutrino program.
@@ -79,14 +76,10 @@ class NProgram(NBinary):
     [compiler_node] = self.get_input_nodes(compiler=True)
     outpath = self.get_output_path()
     [file] = self.get_input_paths(src=True)
-    modules = self.get_input_paths(module=True)
-    options = "--files[ \"%(files)s\" ] --compile{ --modules[ %(modules)s ] } --out \"%(out)s\"" % {
-      "modules": " ".join(["\"%s\"" % m for m in modules]),
-      "files": file,
-      "out": outpath
-    }
-    command = compiler_node.get_run_command_line(system, [options])
-    return Command(command)
+    modules = ['"%s"' % m for m in self.get_input_paths(module=True)]
+    options = (["--files[", '"%s"' % file, "]", "--compile{", "--modules["] +
+        modules + ["]", "}", "--out", '"%s"' % outpath])
+    return compiler_node.get_run_command_builder(system, options).build()
 
 
 # The tools for working with neutrino. Available in mkmk files as "n".

@@ -27,17 +27,10 @@ class System(object):
   def get_ensure_folder_command(self, folder):
     pass
 
-  # Returns the command that runs the given command line, printing the output
-  # and also storing it in the given outpath, but deletes the outpath again and
-  # fails if the command line fails. Sort of how you wish tee could work.
+  # Returns the a new command builder that can be used to build commands on this
+  # platform.
   @abstractmethod
-  def get_safe_tee_command(self, command_line, outpath):
-    pass
-
-  # Returns a command the executes the given command in an environment augmented
-  # with the given bindings.
-  @abstractmethod
-  def run_with_environment(self, command, env, args=[]):
+  def new_command_builder(self, executable, *args):
     pass
 
   # Returns a command that recursively removes the given folder without failing
@@ -47,110 +40,165 @@ class System(object):
     pass
 
 
+class CommandBuilder(object):
+
+  def __init__(self, executable, *args):
+    self.executable = executable
+    self.args = args
+    self.comment = None
+    self.tee_dest = None
+    self.env = []
+
+  def set_comment(self, comment):
+    self.comment = comment
+    return self
+
+  def set_tee_destination(self, dest):
+    self.tee_dest = dest
+    return self
+
+  def add_env(self, env):
+    self.env = list(self.env) + list(env)
+    return self
+
+  def add_arguments(self, args):
+    self.args = list(self.args) + list(args)
+    return self
+
+
+class PosixCommandBuilder(CommandBuilder):
+
+  def build(self):
+    args = map(shell_escape, self.args)
+    raw_command = "%s %s" % (self.executable, " ".join(args))
+    if len(self.env) > 0:
+      envs = []
+      for (name, value, mode) in self.env:
+        if type(value) == list:
+          value = ":".join(value)
+        if mode == "append":
+          envs.append("%(name)s=$$%(name)s:%(value)s" % {
+            "name": name,
+            "value": value
+          })
+        elif mode == "replace":
+          envs.append("%(name)s=%(value)s" % {
+            "name": name,
+            "value": value
+          })
+        else:
+          raise Exception("Unknown mode %s" % mode)
+      raw_command = "%s %s" % (" ".join(envs), raw_command)
+    if self.tee_dest:
+      params = {
+        "command_line": raw_command,
+        "outpath": self.tee_dest
+      }
+      parts = [
+        "%(command_line)s > %(outpath)s || echo > %(outpath)s.fail",
+        "cat %(outpath)s",
+        "if [ -f %(outpath)s.fail ]; then rm %(outpath)s %(outpath)s.fail; false; else true; fi",
+      ]
+      result = Command(*[part % params for part in parts])
+    else:
+      result = Command(raw_command)
+    if self.comment:
+      result.set_comment(self.comment)
+    return result
+
+
 class PosixSystem(System):
 
+  def new_command_builder(self, executable, *args):
+    return PosixCommandBuilder(executable, *args)
+
   def get_ensure_folder_command(self, folder):
-    command = "mkdir -p %s" % shell_escape(folder)
-    return Command(command)
+    return (self
+        .new_command_builder("mkdir", "-p", folder)
+        .build())
 
   def get_clear_folder_command(self, folder):
-    command = "rm -rf %s" % (shell_escape(folder))
-    comment = "Clearing '%s'" % folder
-    return Command(command).set_comment(comment)
-
-  def get_safe_tee_command(self, command_line, outpath):
-    params = {
-      "command_line": command_line,
-      "outpath": outpath
-    }
-    parts = [
-      "%(command_line)s > %(outpath)s || echo > %(outpath)s.fail",
-      "cat %(outpath)s",
-      "if [ -f %(outpath)s.fail ]; then rm %(outpath)s %(outpath)s.fail; false; else true; fi",
-    ]
-    comment = "Running %(command_line)s" % params
-    return Command(*[part % params for part in parts])
-
-  def run_with_environment(self, command, env, args=[]):
-    envs = []
-    for (name, value, mode) in env:
-      if type(value) == list:
-        value = ":".join(value)
-      if mode == "append":
-        envs.append("%(name)s=$$%(name)s:%(value)s" % {
-          "name": name,
-          "value": value
-        })
-      elif mode == "replace":
-        envs.append("%(name)s=%(value)s" % {
-          "name": name,
-          "value": value
-        })
-      else:
-        raise Exception("Unknown mode %s" % mode)
-    return "%s %s %s" % (" ".join(envs), command, " ".join(args))
+    return (self
+        .new_command_builder("rm", "-rf", folder)
+        .set_comment("Clearing '%s'" % folder)
+        .build())
 
   def get_copy_command(self, source, target):
-    command = "cp %s %s" % (shell_escape(source), shell_escape(target))
-    comment = "Copying to '%s'" % target
-    return Command(command).set_comment(comment)
+    return (self
+      .new_command_builder("cp", source, target)
+      .set_comment("Copying to '%s'" % target)
+      .build())
 
 
 def cmd_escape(str):
-  return str.replace("\"", "\\\"")
+  return re.sub(r'([\"])', r"\\\g<1>", str)
+
+
+class WindowsCommandBuilder(CommandBuilder):
+
+  def build(self):
+    args = map(shell_escape, self.args)
+    raw_command = "%s %s" % (self.executable, " ".join(args))
+    if len(self.env) > 0:
+      envs = []
+      for (name, value, mode) in self.env:
+        if type(value) == list:
+          value = ";".join(value)
+        if mode == "append":
+          env = "set \"%(name)s=%%%(name)s%%;%(value)s\"" % {
+            "name": name,
+            "value": value
+          }
+        elif mode == "replace":
+          env = "set \"%(name)s=%(value)s\"" % {
+            "name": name,
+            "value": value
+          }
+        else:
+          raise Exception("Unknown mode %s" % mode)
+        envs.append(env)
+      raw_command = "cmd /C \"%s && %s\"" % (" && ".join(envs), cmd_escape(raw_command))
+    if self.tee_dest:
+      params = {
+        "command_line": raw_command,
+        "outpath": self.tee_dest
+      }
+      parts = [
+        "%(command_line)s > %(outpath)s || echo > %(outpath)s.fail",
+        "type %(outpath)s",
+        "if exist %(outpath)s.fail (del %(outpath)s %(outpath)s.fail && exit 1) else (exit 0)",
+      ]
+      result = Command(*[part % params for part in parts])
+    else:
+      result = Command(raw_command)
+    if self.comment:
+      result.set_comment(self.comment)
+    return result
+
 
 class WindowsSystem(System):
+
+  def new_command_builder(self, executable, *args):
+    return WindowsCommandBuilder(executable, *args)
 
   def get_ensure_folder_command(self, folder):
     # Windows mkdir doesn't have an equivalent to -p but we can use a bit of
     # logic instead.
-    path = shell_escape(folder)
-    action = "if not exist %(path)s mkdir %(path)s" % {"path": path}
-    return Command(action)
+    return (self
+        .new_command_builder("if", "not", "exist", folder, "mkdir", folder)
+        .build())
 
   def get_clear_folder_command(self, folder):
-    path = shell_escape(folder)
-    comment = "Clearing '%s'" % path
-    action = "if exist %(path)s rmdir /s /q %(path)s" % {"path": path}
-    return Command(action).set_comment(comment)
-
-  def get_safe_tee_command(self, command_line, outpath):
-    params = {
-      "command_line": command_line.replace("\\", "\\\\"),
-      "outpath": outpath
-    }
-    parts = [
-      "%(command_line)s > %(outpath)s || echo > %(outpath)s.fail",
-      "type %(outpath)s",
-      "if exist %(outpath)s.fail (del %(outpath)s %(outpath)s.fail && exit 1) else (exit 0)",
-    ]
-    comment = "Running %(command_line)s" % params
-    return Command(*[part % params for part in parts])
-
-  def run_with_environment(self, command, env, args=[]):
-    envs = []
-    for (name, value, mode) in env:
-      if type(value) == list:
-        value = ";".join(value)
-      if mode == "append":
-        envs.append("set \"%(name)s=%%%(name)s%%\;%(value)s\"" % {
-          "name": name,
-          "value": value
-        })
-      elif mode == "replace":
-        envs.append("set \"%(name)s=%(value)s\"" % {
-          "name": name,
-          "value": value
-        })
-      else:
-        raise Exception("Unknown mode %s" % mode)
-    subcommand = "%s %s" % (command, " ".join(args))
-    return "cmd /c \"%s && %s\"" % (" && ".join(envs), cmd_escape(subcommand))
+    return (self
+        .new_command_builder("if", "exist", folder, "rmdir", "/s", "/q", folder)
+        .set_comment("Clearing '%s'" % folder)
+        .build())
 
   def get_copy_command(self, source, target):
-    command = "copy %s %s" % (shell_escape(source), shell_escape(target))
-    comment = "Copying to '%s'" % target
-    return Command(command).set_comment(comment)
+    return (self
+        .new_command_builder("copy", source, target)
+        .set_comment("Copying to '%s'" % target)
+        .build())
 
 
 def get(os):
