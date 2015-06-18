@@ -95,7 +95,7 @@ class PosixCommandBuilder(CommandBuilder):
         "outpath": self.tee_dest
       }
       parts = [
-        "%(command_line)s > %(outpath)s || echo > %(outpath)s.fail",
+        "%(command_line)s > %(outpath)s 2>&1 || echo > %(outpath)s.fail",
         "cat %(outpath)s",
         "if [ -f %(outpath)s.fail ]; then rm %(outpath)s %(outpath)s.fail; false; else true; fi",
       ]
@@ -164,7 +164,7 @@ class WindowsCommandBuilder(CommandBuilder):
         "outpath": self.tee_dest
       }
       parts = [
-        "%(command_line)s > %(outpath)s || echo > %(outpath)s.fail",
+        "%(command_line)s > %(outpath)s 2>&1 || echo > %(outpath)s.fail",
         "type %(outpath)s",
         "if exist %(outpath)s.fail (del %(outpath)s %(outpath)s.fail && exit 1) else (exit 0)",
       ]
