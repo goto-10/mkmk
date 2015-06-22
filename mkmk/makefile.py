@@ -8,6 +8,7 @@ import node
 import os
 import os.path
 import re
+import stat
 import sys
 
 
@@ -45,6 +46,7 @@ class Makefile(object):
   def __init__(self):
     self.targets = {}
     self.phonies = set()
+    self.metadata = None
 
   # Add a target that builds the given output from the given inputs by invoking
   # the given commands in sequence.
@@ -54,6 +56,9 @@ class Makefile(object):
     if is_phony:
       self.phonies.add(output)
 
+  def set_metadata(self, value):
+    self.metadata = value
+
   # Write this makefile in Makefile syntax to the given stream.
   def write(self, out):
     for name in sorted(self.targets.keys()):
@@ -62,6 +67,10 @@ class Makefile(object):
     # Mike Moffit says: list *all* the phonies.
     if self.phonies:
       out.write(".PHONY: %s\n\n" % " ".join(sorted(list(self.phonies))))
+    if self.metadata:
+      import json
+      encoded = json.dumps(self.metadata, sort_keys=True, indent=None)
+      out.write("# META: %s\n\n" % encoded)
 
 
 # A segmented name. This is sort of like a relative file path but avoids any
@@ -112,22 +121,30 @@ class Name(object):
 # An abstract file wrapper that encapsulates various file operations.
 class AbstractFile(object):
 
-  def __init__(self, path, parent):
+  def __init__(self, path, env, parent):
     self.path = path
+    self.env = env
     self.parent = parent
     self.children = {}
     self.attribs = {}
+    self.exists_cache = None
 
   # Creates a new file object of the appropriate type depending on what kind of
   # file the path points to.
   @staticmethod
-  def at(path, parent=None):
-    if os.path.isdir(path):
-      return Folder(path, parent)
-    elif os.path.isfile(path):
-      return RegularFile(path, parent)
-    else:
-      return MissingFile(path, parent)
+  def at(path, env, parent):
+    try:
+      # Try to state the file first since this lets us determine all the
+      # properties in one call. Fall through on failure.
+      mode = os.stat(path).st_mode
+      if stat.S_ISDIR(mode):
+        return Folder(path, env, parent)
+      elif stat.S_ISREG(mode):
+        return RegularFile(path, env, parent)
+    except OSError:
+      # If the file doesn't exist we land here.
+      pass
+    return MissingFile(path, env, parent)
 
   # Returns the folder that contains this file.
   def get_parent(self):
@@ -138,7 +155,7 @@ class AbstractFile(object):
         # to be the relative current directory since that's where the file is
         # assumed to be.
         dirname = "."
-      self.parent = AbstractFile.at(dirname)
+      self.parent = AbstractFile.at(dirname, self.env, None)
     return self.parent
 
   # Returns a file representing the child under this folder with the given path.
@@ -151,25 +168,52 @@ class AbstractFile(object):
   # Like get_child but only takes a single argument so only files directly under
   # this folder can be accessed this way.
   def get_local_child(self, part):
-    if not part in self.children:
-      child = AbstractFile.at(os.path.join(self.path, part), parent=self)
+    child = self.children.get(part, None)
+    if child is None:
+      child = AbstractFile.at(os.path.join(self.path, part), self.env,
+        parent=self)
       self.children[part] = child
-    return self.children[part]
+    return child
+
+  def get_input_files(self):
+    return [self]
 
   # Returns the raw underlying (relative) string path.
   def get_path(self):
     return self.path
 
+  def get_modified_time(self):
+    mtime_secs = os.path.getmtime(self.get_path())
+    return int(1000 * mtime_secs)
+
   # Is this file handle backed by a physical file?
   def exists(self):
-    return os.path.exists(self.get_path())
+    # Checking for file existence is slow on windows so cache the result.
+    if self.exists_cache is None:
+      self.exists_cache = os.path.exists(self.get_path())
+    return self.exists_cache
 
   # Returns an in-memory attribute associated with this file, computing it using
-  # the given thunk if it doesn't already exist.
-  def get_attribute(self, name, thunk):
-    if not name in self.attribs:
-      self.attribs[name] = thunk(self)
-    return self.attribs[name]
+  # the given thunk if it doesn't already exist. If the sticky flag is true then
+  # the result will be persisted in the metadata and not recomputed until the
+  # file changes.
+  def get_attribute(self, name, thunk, sticky=False):
+    # If we've already seen the attribute return the cached value.
+    if name in self.attribs:
+      return self.attribs[name]
+    if sticky:
+      # If the value is sticky we first try to get it from the cache in the env.
+      cached = self.env.peek_file_attribute(self, name)
+      if not cached is None:
+        self.attribs[name] = cached
+        return cached
+    # Calculate the value then.
+    value = thunk(self)
+    self.attribs[name] = value
+    if sticky:
+      # If the value is sticky store it for later use.
+      self.env.set_file_attribute(self, name, value)
+    return value
 
   def __cmp__(self, that):
     return cmp(self.path, that.path)
@@ -187,8 +231,8 @@ class AbstractFile(object):
 # way, for instance read them, it won't work.
 class MissingFile(AbstractFile):
 
-  def __init__(self, path, parent):
-    super(MissingFile, self).__init__(path, parent)
+  def __init__(self, path, env, parent):
+    super(MissingFile, self).__init__(path, env, parent)
 
   def __str__(self):
     return "Missing(%s)" % self.get_path()
@@ -197,8 +241,8 @@ class MissingFile(AbstractFile):
 # A wrapper around a regular file.
 class RegularFile(AbstractFile):
 
-  def __init__(self, path, parent):
-    super(RegularFile, self).__init__(path, parent)
+  def __init__(self, path, env, parent):
+    super(RegularFile, self).__init__(path, env, parent)
     self.lines = None
 
   def __str__(self):
@@ -221,8 +265,8 @@ class RegularFile(AbstractFile):
 # A wrapper around a folder.
 class Folder(AbstractFile):
 
-  def __init__(self, path, parent):
-    super(Folder, self).__init__(path, parent)
+  def __init__(self, path, env, parent):
+    super(Folder, self).__init__(path, env, parent)
 
   def __str__(self):
     return "Folder(%s)" % self.get_path()
@@ -361,7 +405,7 @@ class ConfigContext(object):
 
   @export_to_build_scripts
   def get_system_file(self, name):
-    return AbstractFile.at(name)
+    return self.env.get_system_file(name)
 
   # Creates a source file that represents the given source file.
   @export_to_build_scripts
@@ -379,6 +423,11 @@ class ConfigContext(object):
       alias.add_member(child)
     return alias
 
+  # Loads information about a given library.
+  @export_to_build_scripts
+  def get_library_info(self, name):
+    return self.env.ensure_library_info(name)
+
   # If a node with the given name already exists within this context returns it,
   # otherwise creates a new node by invoking the given class object with the
   # given arguments and registers the result under the given name.
@@ -395,6 +444,9 @@ class ConfigContext(object):
   # Returns the full name of the script represented by this context.
   def get_full_name(self):
     return self.full_name
+
+  def get_system(self):
+    return self.env.get_system()
 
   # Returns a file in the output directory with the given name and, optionally,
   # extension.
@@ -462,6 +514,53 @@ class Nodespace(object):
     return self.bindir
 
 
+# A concrete instance of a library for a specific platform.
+class LibraryInstance(object):
+
+  def __init__(self, includes, libs, autoresolve):
+    self.includes = includes
+    self.libs = libs
+    self.autoresolve = autoresolve
+
+  # Returns the header paths to include.
+  def get_includes(self):
+    return self.includes
+
+  # Returns the libraries to link against.
+  def get_libs(self):
+    return self.libs
+
+  # If this is an autoresolve library instance, performs automatic resolution.
+  def ensure_auto_resolved(self, system):
+    if self.autoresolve is None:
+      return
+    assert (self.includes is None) and (self.libs is None)
+    (self.includes, self.libs) = system.auto_resolve_library(self.autoresolve)
+    self.autoresolve = None
+
+
+# General info about a library with different instances for each platform.
+class LibraryInfo(object):
+
+  def __init__(self, name):
+    self.name = name
+    self.platforms = {}
+
+  # Adds library info for the given plaform. Either a set of includepaths and
+  # libraries to link against can be specified, or on platforms that support
+  # automatic resolution (that is, posix using pkg-config) autoresolve can be
+  # set to the name to resolve the library through.
+  def add_platform(self, platform, includes=None, libs=None, autoresolve=None):
+    self.platforms[platform] = LibraryInstance(includes, libs, autoresolve)
+    return self
+
+  # Returns the library instance for the given platform.
+  def get_instance(self, platform):
+    if not platform in self.platforms:
+      raise AssertionError("No instance of %s found for %s." % (self.name, platform))
+    return self.platforms[platform]
+
+
 # The static environment that is shared and constant between all contexts and
 # across the lifetime of the build process. The environment is responsible for
 # keeping track of nodes and dependencies, and for providing the context-
@@ -478,7 +577,7 @@ class Nodespace(object):
 # dependencies they live in, making them unique globally.
 class Environment(object):
 
-  def __init__(self, options):
+  def __init__(self, options, metasource=None):
     self.options = options
     self.extension_names = options.extension
     self.extensions = None
@@ -486,6 +585,9 @@ class Environment(object):
     self.system = None
     self.all_nodes = {}
     self.deps = {}
+    self.library_info = {}
+    self.attrib_cache = self.read_attrib_cache(metasource)
+    self.system_file_cache = {}
 
   def is_noisy(self):
     return self.options.noisy
@@ -501,10 +603,31 @@ class Environment(object):
     self.deps[name] = result
     return result
 
+  def get_attrib_cache(self):
+    return self.attrib_cache
+
+  # Reads the attribute cache from the persisted metadata in the metasource
+  # file. If no metadata can be found returns an empty cache.
+  META_RE = re.compile(r"# META: (.*)")
+  def read_attrib_cache(self, metasource):
+    if os.path.exists(metasource):
+      with open(metasource, "rt") as f:
+        for line in f.readlines():
+          match = self.META_RE.match(line)
+          if match:
+            import json
+            return json.loads(match.group(1))
+    return {}
+
   # Returns the parsed custom flags.
   def get_custom_flags(self):
     assert not self.custom_flags is None
     return self.custom_flags
+
+  def get_system_file(self, name):
+    if not name in self.system_file_cache:
+      self.system_file_cache[name] = AbstractFile.at(name, self, None)
+    return self.system_file_cache[name]
 
   # Returns the map of tools for the given context.
   def get_tools(self, context):
@@ -519,6 +642,62 @@ class Environment(object):
       from . import system
       self.system = system.get(self.options.system)
     return self.system
+
+  # Gets a persisted file attribute if a valid one can be found, otherwise None.
+  def peek_file_attribute(self, file, attrib):
+    path = file.get_path()
+    attrib_cache = self.get_attrib_cache()
+    if (attrib_cache is None) or (not path in attrib_cache):
+      return None
+    file_cache = attrib_cache[path]
+    cache_time = file_cache.get("mtime", 0)
+    file_time = file.get_modified_time()
+    if cache_time == file_time:
+      return file_cache.get(attrib, None)
+    else:
+      return None
+
+  # Persist the given attribute on the given file.
+  def set_file_attribute(self, file, attrib, value):
+    path = file.get_path()
+    attrib_cache = self.get_attrib_cache()
+    if attrib_cache is None:
+      return
+    if not path in attrib_cache:
+      attrib_cache[path] = {}
+    file_cache = attrib_cache[path]
+    file_time = file.get_modified_time()
+    cache_time = file_cache.get("mtime", 0)
+    if cache_time != file_time:
+      attrib_cache[path] = {"mtime": file_time}
+    attrib_cache[path][attrib] = value
+
+  # Returns the library info for the given name, creating it if it doesn't
+  # exist.
+  def ensure_library_info(self, name):
+    if not name in self.library_info:
+      self.library_info[name] = LibraryInfo(name)
+    return self.library_info[name]
+
+  # Returns a descriptor of the library with the given name, failing if it
+  # doesn't exist.
+  def get_library_info(self, name):
+    if not name in self.library_info:
+      raise AssertionError("Library %s not defined" % name)
+    return self.library_info[name]
+    if not name in self.library_info_cache:
+      value = self.get_system().get_library_info(name)
+      if value is None:
+        self.library_info_cache[name] = self.library_info_defaults.get(name, None)
+      else:
+        self.library_info_cache[name] = value
+    return self.library_info_cache[name]
+
+  # Sets the default library info to use if the framework that interrogates the
+  # system doesn't know one.
+  def set_default_library_info(self, name, includes, libs):
+    from . import system
+    self.library_info_defaults[name] = system.LibraryInfo(name, includes, libs)
 
   # Returns a list of (name, controller) pairs with an entry for each extension
   # enabled for this build process.
@@ -604,6 +783,7 @@ class Environment(object):
     clean_command = self.get_system().get_clear_folder_command(bindir.get_path())
     clean_actions = clean_command.get_actions(self)
     makefile.add_target("clean", [], clean_actions, True)
+    makefile.set_metadata(self.attrib_cache)
     makefile.write(out)
 
   # Returns a list of the python modules supported by this environment.
@@ -651,14 +831,14 @@ class MkMkMakefile(object):
     self.options = options
 
   def run(self):
-    root_mkmk = AbstractFile.at(self.options.config)
-    root_mkmk_home = root_mkmk.get_parent()
-    bindir = AbstractFile.at(self.options.bindir)
-    env = Environment(self.options)
+    makefile = self.options.makefile
+    env = Environment(self.options, metasource=makefile)
     env.parse_custom_flags(self.options.buildflags)
+    root_mkmk = AbstractFile.at(self.options.config, env, None)
+    root_mkmk_home = root_mkmk.get_parent()
+    bindir = AbstractFile.at(self.options.bindir, env, None)
     nodespace = Nodespace(env, None, root_mkmk_home, bindir)
     context = ConfigContext(nodespace, root_mkmk_home, Name.of())
     context.load(root_mkmk)
-    makefile = self.options.makefile
     ensure_parent(makefile)
     env.write_makefile(open(makefile, "wt"), bindir)

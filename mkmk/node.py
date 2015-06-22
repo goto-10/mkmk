@@ -71,7 +71,10 @@ class Node(object):
   # are included in the result so specifying an empty annotation set will give
   # all the dependencies.
   def get_input_paths(self, **annots):
-    return [n.get_input_file().get_path() for n in self.get_input_nodes(**annots)]
+    return [f.get_path() for f in self.get_input_files(**annots)]
+
+  def get_input_files(self, **annots):
+    return [n.get_input_file() for n in self.get_input_nodes(**annots)]
 
   # Returns the nodes of all the dependencies from this node.
   def get_input_nodes(self, **annots):
@@ -294,6 +297,9 @@ class GroupNode(VirtualNode):
   # Adds a member to this group.
   def add_member(self, node):
     self.add_dependency(node)
+
+  def add_file(self, file):
+    self.add_dependency(FileNode(file.path, self.context, file))
 
   # A group node doesn't produce any actual output, it is resolved directly into
   # anything that depends on it.

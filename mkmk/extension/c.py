@@ -255,7 +255,7 @@ class MSVC(Toolchain):
       cflags += ["/Zi", "/Fd%s.pdb" % shell_escape(output)]
     command = "$(CC) %(cflags)s /Fe%(output)s %(inputs)s" % {
       "output": shell_escape(output),
-      "inputs": " ".join(map(shell_escape, inputs)),
+      "inputs": " ".join(map(shell_escape, inputs + libs)),
       "cflags": " ".join(cflags)
     }
     comment = "Building executable %s" % os.path.basename(output)
@@ -424,7 +424,8 @@ class CSourceNode(AbstractNode):
   def __init__(self, name, context, tools, handle):
     super(CSourceNode, self).__init__(name, context, tools)
     self.handle = handle
-    self.includes = set()
+    self.local_includes = set()
+    self.system_includes = set()
     self.headers = None
     self.defines = []
     self.force_c = False
@@ -444,8 +445,10 @@ class CSourceNode(AbstractNode):
 
   # Returns the list of names included into the given file. Used to calculate
   # the transitive includes.
-  def get_include_names(self, handle):
-    return handle.get_attribute("include names", CSourceNode.scan_for_include_names)
+  @staticmethod
+  def get_include_names(handle):
+    return handle.get_attribute("include_names",
+      CSourceNode.scan_for_include_names, sticky=True)
 
   # Scans a file for includes. You generally don't want to call this directly
   # because it's slow, instead use get_include_names which caches the result on
@@ -467,11 +470,24 @@ class CSourceNode(AbstractNode):
       self.headers = self.calc_included_headers()
     return self.headers
 
+  # Returns the string paths of all the includepaths.
+  def get_include_paths(self):
+    return [i.get_path() for i in self.get_local_includes()] + sorted(self.system_includes)
+
+  # Gets the local files included, that is, the files that we should watch for
+  # changes as opposed to system includes which are assumed to lie outside the
+  # project and not change.
+  def get_local_includes(self):
+    result = []
+    for inc in sorted(self.local_includes):
+      result += inc.get_input_files()
+    return sorted(result)
+
   # Calculates the list of handles of files included by this source file.
   def calc_included_headers(self):
     headers = set()
     files_scanned = set()
-    folders = [self.handle.get_parent()] + list(self.includes)
+    folders = [self.handle.get_parent()] + self.get_local_includes()
     names_seen = set()
     # Scans the contents of the given file handle for includes, recursively
     # resolving them as they're encountered.
@@ -479,7 +495,7 @@ class CSourceNode(AbstractNode):
       if (not handle.exists()) or (handle.get_path() in files_scanned):
         return
       files_scanned.add(handle.get_path())
-      for name in self.get_include_names(handle):
+      for name in CSourceNode.get_include_names(handle):
         resolve_include(name)
     # Looks for the source of a given include in the include paths and if found
     # recursively scans the file for includes.
@@ -500,14 +516,15 @@ class CSourceNode(AbstractNode):
   # Add a folder to the include paths required by this source file. Adding the
   # same path more than once is safe.
   def add_include(self, path):
-    self.includes.add(path)
+    self.local_includes.add(path)
+
+  # Adds a string path to the list of system includes for this file.
+  def add_system_include(self, path):
+    assert isinstance(path, basestring)
+    self.system_includes.add(path)
 
   def add_define(self, key, value):
     self.defines.append((key, value))
-
-  # Returns a sorted list of the include paths for this source file.
-  def get_includes(self):
-    return sorted(list(self.includes))
 
   def get_defines(self):
     return self.defines
@@ -528,20 +545,23 @@ class ObjectNode(AbstractNode):
     self.add_dependency(source, src=True)
     self.source = source
     self.is_cpp = is_cpp
-    self.libraries = {}
+    self.libraries = set()
 
   def get_source(self):
     return self.source
 
-  def add_library_requirement(self, **kwargs):
-    for (platform, value) in kwargs.items():
-      if not platform in self.libraries:
-        self.libraries[platform] = set()
-      self.libraries[platform].add(value)
+  def add_library(self, lib):
+    info = self.context.get_library_info(lib)
+    system = self.context.get_system()
+    instance = info.get_instance(system.get_os())
+    instance.ensure_auto_resolved(system)
+    for inc in instance.get_includes():
+      self.source.add_system_include(inc)
+    for lib in instance.get_libs():
+      self.libraries.add(lib)
 
   def get_libraries(self, platform):
-    os = platform.get_os()
-    return self.libraries.get(os, [])
+    return sorted(self.libraries)
 
   def get_output_file(self):
     source_name = self.get_source().get_name()
@@ -550,11 +570,10 @@ class ObjectNode(AbstractNode):
     return self.get_context().get_outdir_file(object_name)
 
   def get_command_line(self, system):
-    includepaths = self.source.get_includes()
+    includes = self.source.get_include_paths()
     defines = self.source.get_defines()
     outpath = self.get_output_path()
     inpaths = self.get_input_paths(src=True)
-    includes = [p.get_path() for p in includepaths]
     return self.get_toolchain().get_object_compile_command(outpath, inpaths,
       includepaths=includes, defines=defines, is_cpp=self.is_cpp,
       force_c=self.source.get_force_c())

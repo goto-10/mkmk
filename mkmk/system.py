@@ -9,6 +9,8 @@ from abc import ABCMeta, abstractmethod
 from command import Command, shell_escape
 import os.path
 import re
+import subprocess
+import sys
 
 
 # A system is a set of tools used to interact with the current platform etc.
@@ -129,6 +131,15 @@ class PosixSystem(System):
       .set_comment("Copying to '%s'" % target)
       .build())
 
+  def auto_resolve_library(self, name):
+    process = subprocess.Popen(["pkg-config", "--cflags", "--libs", name], stdout=subprocess.PIPE)
+    (stdout, stderr) = process.communicate()
+    if process.returncode != 0:
+      sys.exit(1)
+    flags = stdout.split()
+    includes = [f[2:] for f in flags if f.startswith("-I")]
+    libs = [f[2:] for f in flags if f.startswith("-l")]
+    return (includes, libs)
 
 def cmd_escape(str):
   return re.sub(r'([\"])', r"\\\g<1>", str)
