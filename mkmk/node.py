@@ -162,6 +162,9 @@ class FileNode(PhysicalNode):
   def get_run_command_builder(self, platform):
     return platform.new_command_builder(self.handle.get_path())
 
+  def get_libraries(self, platform):
+    return []
+
 
 # A node representing the execution of a custom command.
 class CustomExecNode(PhysicalNode):

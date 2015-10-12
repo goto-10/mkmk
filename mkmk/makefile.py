@@ -298,11 +298,28 @@ def export_to_build_scripts(fun):
 # and for holding context information for a given mkmk file.
 class ConfigContext(object):
 
-  def __init__(self, nodespace, home, full_name):
+  def __init__(self, nodespace, home, full_name, parent):
     self.nodespace = nodespace
     self.env = nodespace.get_environment()
     self.home = home
     self.full_name = full_name
+    self.parent = parent
+    self.attribs = {}
+
+  def get_attribute(self, name, defawlt=None):
+    return self.attribs.get(name, defawlt)
+
+  def set_attribute(self, name, value):
+    self.attribs[name] = value
+
+  def set_pervasive_attribute(self, name, value):
+    self.env.set_transient_attribute(name, value)
+
+  def get_pervasive_attribute(self, name, defawlt=None):
+    return self.env.get_transient_attribute(name, defawlt)
+
+  def get_parent(self):
+    return self.parent
 
   # Builds the environment dictionary containing all the toplevel functions in
   # the mkmk.
@@ -321,7 +338,7 @@ class ConfigContext(object):
     rel_parent_path = rel_mkmk_path[:-1]
     full_name = self.full_name.append(*rel_parent_path)
     mkmk_home = full_mkmk.get_parent()
-    subcontext = ConfigContext(self.nodespace, mkmk_home, full_name)
+    subcontext = ConfigContext(self.nodespace, mkmk_home, full_name, self)
     subcontext.load(full_mkmk)
 
   @export_to_build_scripts
@@ -337,7 +354,7 @@ class ConfigContext(object):
     mkmk_home = full_mkmk.get_parent()
     bindir = self.nodespace.bindir.get_child('deps', dep_name)
     nodespace = self.env.create_dep(dep_name, mkmk_home, bindir)
-    subcontext = ConfigContext(nodespace, mkmk_home, Name.of())
+    subcontext = ConfigContext(nodespace, mkmk_home, Name.of(), None)
     subcontext.load(full_mkmk)
 
   # Returns a group node with the given name, creating it if it doesn't already
@@ -588,6 +605,7 @@ class Environment(object):
     self.library_info = {}
     self.attrib_cache = self.read_attrib_cache(metasource)
     self.system_file_cache = {}
+    self.transient_attribs = {}
 
   def is_noisy(self):
     return self.options.noisy
@@ -605,6 +623,12 @@ class Environment(object):
 
   def get_attrib_cache(self):
     return self.attrib_cache
+
+  def set_transient_attribute(self, key, value):
+    self.transient_attribs[key] = value
+
+  def get_transient_attribute(self, key, defawlt=None):
+    return self.transient_attribs.get(key, defawlt)
 
   # Reads the attribute cache from the persisted metadata in the metasource
   # file. If no metadata can be found returns an empty cache.
@@ -838,7 +862,7 @@ class MkMkMakefile(object):
     root_mkmk_home = root_mkmk.get_parent()
     bindir = AbstractFile.at(self.options.bindir, env, None)
     nodespace = Nodespace(env, None, root_mkmk_home, bindir)
-    context = ConfigContext(nodespace, root_mkmk_home, Name.of())
+    context = ConfigContext(nodespace, root_mkmk_home, Name.of(), None)
     context.load(root_mkmk)
     ensure_parent(makefile)
     env.write_makefile(open(makefile, "wt"), bindir)
