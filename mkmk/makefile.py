@@ -7,6 +7,7 @@ import argparse
 import node
 import os
 import os.path
+import platform
 import re
 import stat
 import sys
@@ -272,6 +273,21 @@ class Folder(AbstractFile):
     return "Folder(%s)" % self.get_path()
 
 
+class PlatformInfo(object):
+
+  def is_64_bit(self):
+    return sys.maxsize > 2**32
+
+  def is_32_bit(self):
+    return not self.is_64_bit()
+
+  def is_windows(self):
+    return platform.system() == "Windows"
+
+
+_PLATFORM_INFO = PlatformInfo()
+
+
 # A function marked to be exported into build scripts.
 class ExportedFunction(object):
 
@@ -444,6 +460,10 @@ class ConfigContext(object):
   @export_to_build_scripts
   def get_library_info(self, name):
     return self.env.ensure_library_info(name)
+
+  @export_to_build_scripts
+  def get_platform_info(self):
+    return _PLATFORM_INFO
 
   # If a node with the given name already exists within this context returns it,
   # otherwise creates a new node by invoking the given class object with the
