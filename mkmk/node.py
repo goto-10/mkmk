@@ -298,11 +298,11 @@ class Edge(object):
 class GroupNode(VirtualNode):
 
   # Adds a member to this group.
-  def add_member(self, node):
-    self.add_dependency(node)
+  def add_member(self, node, **annots):
+    self.add_dependency(node, **annots)
 
-  def add_file(self, file):
-    self.add_dependency(FileNode(file.path, self.context, file))
+  def add_file(self, file, **annots):
+    self.add_dependency(FileNode(file.path, self.context, file), **annots)
 
   # A group node doesn't produce any actual output, it is resolved directly into
   # anything that depends on it.
@@ -321,6 +321,16 @@ class GroupNode(VirtualNode):
 # A different name for a group of nodes. Similar to a group except that a target
 # is produces so the alias can be built independently of any physical targets.
 class AliasNode(GroupNode):
+
+  def __init__(self, name, context):
+    super(AliasNode, self).__init__(name, context)
+    self.phony = True
+
+  def set_phony(self, value):
+    self.phony = value
+
+  def is_phony(self):
+    return self.phony
 
   # Unlike a normal group an alias causes a target to be generated.
   def get_output_target(self):
