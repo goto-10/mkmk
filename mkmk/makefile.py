@@ -447,9 +447,9 @@ class ConfigContext(object):
 
   # Adds a toplevel make alias for the given node.
   @export_to_build_scripts
-  def add_alias(self, name, *nodes):
+  def add_alias(self, name, *nodes, **kwargs):
     # Aliases have two names, one fully qualified and one just the basic name.
-    alias = self.get_or_create_node(name, node.AliasNode)
+    alias = self.get_or_create_node(name, node.AliasNode, **kwargs)
     basic_name = Name.of(name)
     self.nodespace.add_node(basic_name, alias)
     for child in nodes:
@@ -468,9 +468,9 @@ class ConfigContext(object):
   # If a node with the given name already exists within this context returns it,
   # otherwise creates a new node by invoking the given class object with the
   # given arguments and registers the result under the given name.
-  def get_or_create_node(self, name, Class, *args):
+  def get_or_create_node(self, name, Class, *args, **kwargs):
     node_name = self.get_full_name().append(name)
-    return self.nodespace.get_or_create_node(node_name, Class, self, *args)
+    return self.nodespace.get_or_create_node(node_name, Class, self, *args, **kwargs)
 
   # Does the actual work of loading the mkmk file this context corresponds to.
   def load(self, mkmk_file):
@@ -520,10 +520,10 @@ class Nodespace(object):
   # If there is already a node registered under the given name returns it,
   # otherwise creates and registers a new one by calling the given constructor
   # with the given arguments.
-  def get_or_create_node(self, full_name, Class, *args):
+  def get_or_create_node(self, full_name, Class, *args, **kwargs):
     if full_name in self.nodes:
       return self.nodes[full_name]
-    new_node = Class(full_name.get_last_part(), *args)
+    new_node = Class(full_name.get_last_part(), *args, **kwargs)
     return self.add_node(full_name, new_node)
 
   def add_node(self, full_name, node):

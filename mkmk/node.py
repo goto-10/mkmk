@@ -322,9 +322,10 @@ class GroupNode(VirtualNode):
 # is produces so the alias can be built independently of any physical targets.
 class AliasNode(GroupNode):
 
-  def __init__(self, name, context):
+  def __init__(self, name, context, force_global=False):
     super(AliasNode, self).__init__(name, context)
     self.phony = True
+    self.force_global = force_global
 
   def set_phony(self, value):
     self.phony = value
@@ -335,7 +336,7 @@ class AliasNode(GroupNode):
   # Unlike a normal group an alias causes a target to be generated.
   def get_output_target(self):
     prefix = self.context.nodespace.get_prefix()
-    if prefix is None:
+    if prefix is None or self.force_global:
       return self.get_name()
     else:
       return "%s_%s" % (prefix, self.get_name())
