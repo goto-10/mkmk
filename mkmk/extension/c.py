@@ -218,7 +218,7 @@ class Gcc(Toolchain):
 
   def get_executable_compile_command(self, output, inputs, libs, settings):
     linkflags = self.get_linker_flags(settings, libs)
-    command = "$(CC) -o %(output)s %(inputs)s %(linkflags)s" % {
+    command = "$(CC) -o %(output)s  -Wl,--start-group %(inputs)s -Wl,--end-group %(linkflags)s" % {
       "output": shell_escape(output),
       "inputs": " ".join(map(shell_escape, inputs)),
       "linkflags": " ".join(linkflags),
