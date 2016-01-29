@@ -152,7 +152,7 @@ class Gcc(Toolchain):
     optflag = "-O3"
     # Debug flags
     if self.config.debug:
-      result += ["-g"]
+      result += ["-g", "-DDEBUG_MODE=1"]
       if self.config.gcc48:
         # This one is new in gcc48 but is made to be used with -g
         optflag = "-Og"
@@ -265,7 +265,7 @@ class MSVC(Toolchain):
     result += ["/w%s" % w for w in settings.get("warnings", self.get_settings_context(), [])]
     # Debug flags
     if self.config.debug:
-      result += ["/Od", "/Zi"]
+      result += ["/Od", "/Zi", "/DDEBUG_MODE=1"]
     else:
       result += ["/Ox"]
     # Checks en/dis-abled
@@ -307,7 +307,7 @@ class MSVC(Toolchain):
   def get_executable_compile_command(self, output, inputs, libs, settings):
     cflags = settings.get("linkflags", self.get_settings_context(), [])
     if self.config.debug:
-      cflags += ["/PDB:%s.pdb" % shell_escape(output)]
+      cflags += ["/DEBUG", "/PDB:%s.pdb" % shell_escape(output)]
     subsystem = settings.get("subsystem", self.get_settings_context())
     if not subsystem is None:
       cflags += ["/SUBSYSTEM:%s" % subsystem]
@@ -321,7 +321,11 @@ class MSVC(Toolchain):
     return Command(command).set_comment(comment)
 
   def get_shared_library_compile_command(self, output, inputs, libs, settings):
-    command = "link.exe /nologo /DLL /OUT:%(output)s %(inputs)s" % {
+    cflags = ["/NOLOGO", "/DLL"]
+    if self.config.debug:
+      cflags += ["/DEBUG"]
+    command = "link.exe %(cflags)s /OUT:%(output)s %(inputs)s" % {
+      "cflags": " ".join(cflags),
       "output": shell_escape(output),
       "inputs": " ".join(map(shell_escape, inputs + libs))
     }
