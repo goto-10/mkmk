@@ -172,6 +172,8 @@ class Gcc(Toolchain):
       result += ["-DENABLE_CHECKS=1"]
     if self.config.expchecks:
       result += ["-DEXPENSIVE_CHECKS=1"]
+    if self.config.fail_on_devutils:
+      result += ["-DFAIL_ON_DEVUTILS=1"]
     # Strict errors
     if not self.config.warn:
       result += ["-Werror"]
@@ -273,6 +275,8 @@ class MSVC(Toolchain):
       result += ["/DENABLE_CHECKS=1"]
     if self.config.expchecks:
       result += ["/DEXPENSIVE_CHECKS=1"]
+    if self.config.fail_on_devutils:
+      result += ["/DFAIL_ON_DEVUTILS=1"]
     # Strict errors
     if not self.config.warn:
       result += ["/WX"]
@@ -753,6 +757,8 @@ class CController(extend.ToolController):
   def add_custom_flags(self, parser):
     parser.add_argument('--debug', action='store_true', default=False,
       help='Build C objects and executables in debug mode?')
+    parser.add_argument('--fail-on-devutils', action='store_true', default=False,
+      help='Crash on use of development/debugging functionality?')
     parser.add_argument('--gcc48', action='store_true', default=False,
       help='Will we be building with gcc48?')
     parser.add_argument('--expchecks', action='store_true', default=False,
