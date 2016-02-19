@@ -110,6 +110,10 @@ class Toolchain(object):
   def __init__(self, config):
     self.config = config
 
+  def use_debug_codegen(self):
+    return ((self.config.debug_codegen == "on")
+      or (self.config.debug_codegen == "auto" and self.config.debug))
+
   # Look ma, gcc and msvc are sharing code!
   def get_print_env_command(self):
     command = "echo CFLAGS: %s" % (" ".join(self.get_config_flags()))
@@ -152,7 +156,7 @@ class Gcc(Toolchain):
     optflag = "-O3"
     # Debug flags
     if self.config.debug:
-      result += ["-g", "-DDEBUG_MODE=1"]
+      result += ["-g"]
       if self.config.gcc48:
         # This one is new in gcc48 but is made to be used with -g
         optflag = "-Og"
@@ -163,6 +167,8 @@ class Gcc(Toolchain):
     if self.config.fastcompile:
       # Fastcompile overrides everything.
       optflag = "-O0"
+    if self.use_debug_codegen():
+      result += ["-DDEBUG_CODEGEN=1"]
     result += [optflag]
     # Profiling
     if self.config.gprof:
@@ -267,9 +273,11 @@ class MSVC(Toolchain):
     result += ["/w%s" % w for w in settings.get("warnings", self.get_settings_context(), [])]
     # Debug flags
     if self.config.debug:
-      result += ["/Od", "/Zi", "/DDEBUG_MODE=1"]
+      result += ["/Od"]
     else:
       result += ["/Ox"]
+    if self.use_debug_codegen():
+      result += ["/Zi", "/DDEBUG_CODEGEN=1"]
     # Checks en/dis-abled
     if self.config.checks:
       result += ["/DENABLE_CHECKS=1"]
@@ -310,8 +318,10 @@ class MSVC(Toolchain):
 
   def get_executable_compile_command(self, output, inputs, libs, settings):
     cflags = settings.get("linkflags", self.get_settings_context(), [])
+    if self.use_debug_codegen():
+      cflags += ["/DEBUG"]
     if self.config.debug:
-      cflags += ["/DEBUG", "/PDB:%s.pdb" % shell_escape(output)]
+      cflags += ["/PDB:%s.pdb" % shell_escape(output)]
     subsystem = settings.get("subsystem", self.get_settings_context())
     if not subsystem is None:
       cflags += ["/SUBSYSTEM:%s" % subsystem]
@@ -326,7 +336,7 @@ class MSVC(Toolchain):
 
   def get_shared_library_compile_command(self, output, inputs, libs, settings):
     cflags = ["/NOLOGO", "/DLL"]
-    if self.config.debug:
+    if self.use_debug_codegen:
       cflags += ["/DEBUG"]
     command = "link.exe %(cflags)s /OUT:%(output)s %(inputs)s" % {
       "cflags": " ".join(cflags),
@@ -757,6 +767,8 @@ class CController(extend.ToolController):
   def add_custom_flags(self, parser):
     parser.add_argument('--debug', action='store_true', default=False,
       help='Build C objects and executables in debug mode?')
+    parser.add_argument('--debug-codegen', choices=['on', 'off', 'auto'],
+      default='auto', help='Generate code with debug information')
     parser.add_argument('--fail-on-devutils', action='store_true', default=False,
       help='Crash on use of development/debugging functionality?')
     parser.add_argument('--gcc48', action='store_true', default=False,
