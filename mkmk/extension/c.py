@@ -6,6 +6,7 @@
 
 
 from abc import ABCMeta, abstractmethod
+import hashlib
 import os.path
 from ..command import Command, shell_escape
 from .. import extend
@@ -119,6 +120,34 @@ class Toolchain(object):
     command = "echo CFLAGS: %s" % (" ".join(self.get_config_flags()))
     return Command(command)
 
+  # Given a list of string file paths returns a file id for them.
+  def get_fileid(self, inputs):
+    m = hashlib.md5()
+    for name in inputs:
+      basename = os.path.basename(name)
+      m.update(basename)
+    digits = m.hexdigest()[-4:]
+    return "0x%s" % digits
+
+  def get_defines(self, inputs, settings, context):
+    result = []
+    if self.use_debug_codegen():
+      result += self.format_define_flag("DEBUG_CODEGEN", "1")
+    if self.config.checks:
+      result += self.format_define_flag("ENABLE_CHECKS", "1")
+    if self.config.expchecks:
+      result += self.format_define_flag("EXPENSIVE_CHECKS", "1")
+    if self.config.fail_on_devutils:
+      result += self.format_define_flag("FAIL_ON_DEVUTILS", "1")
+    if settings.get("gen_fileid", context, False):
+      fileid = self.get_fileid(inputs)
+      result += self.format_define_flag("FILE_ID", fileid)
+      if self.config.dump_file_ids:
+        # This is kind of a hack but it's probably not worth spending a huge
+        # amount of time one so it should be good enough.
+        print "%s: %s" % (fileid, ", ".join(inputs))
+    return result
+
   # Returns the command for compiling a source file into an object.
   @abstractmethod
   def get_object_compile_command(self, output, inputs, includepaths):
@@ -146,7 +175,10 @@ class Gcc(Toolchain):
       result["language"] = "c++" if is_cpp else "c"
     return result
 
-  def get_config_flags(self, is_cpp, settings):
+  def format_define_flag(self, key, value):
+    return ["-D%s=%s" % (key, value)]
+
+  def get_config_flags(self, inputs, is_cpp, settings):
     context = self.get_settings_context(is_cpp)
     result = settings.get("cflags", context, [])
     result += ["-W%s" % w for w in settings.get("warnings", context, [])]
@@ -167,19 +199,11 @@ class Gcc(Toolchain):
     if self.config.fastcompile:
       # Fastcompile overrides everything.
       optflag = "-O0"
-    if self.use_debug_codegen():
-      result += ["-DDEBUG_CODEGEN=1"]
+    result += self.get_defines(inputs, settings, context)
     result += [optflag]
     # Profiling
     if self.config.gprof:
       result += ["-pg"]
-    # Checks en/dis-abled
-    if self.config.checks:
-      result += ["-DENABLE_CHECKS=1"]
-    if self.config.expchecks:
-      result += ["-DEXPENSIVE_CHECKS=1"]
-    if self.config.fail_on_devutils:
-      result += ["-DFAIL_ON_DEVUTILS=1"]
     # Strict errors
     if not self.config.warn:
       result += ["-Werror"]
@@ -203,7 +227,7 @@ class Gcc(Toolchain):
 
   def get_object_compile_command(self, output, inputs, includepaths, defines,
       is_cpp, force_c, settings):
-    cflags = ["$(CFLAGS)"] + self.get_config_flags(is_cpp, settings)
+    cflags = ["$(CFLAGS)"] + self.get_config_flags(inputs, is_cpp, settings)
     for path in includepaths:
       cflags.append("-I%s" % shell_escape(path))
     if is_cpp:
@@ -267,24 +291,22 @@ class MSVC(Toolchain):
   def get_settings_context(self):
     return MSVC.SETTINGS_CONTEXT
 
-  def get_config_flags(self, settings):
-    result = settings.get("cflags", self.get_settings_context(), [])
+  def format_define_flag(self, key, value):
+    return ["/D%s=%s" % (key, value)]
+
+  def get_config_flags(self, inputs, settings):
+    context = self.get_settings_context()
+    result = settings.get("cflags", context, [])
     result += ["/Wall"]
-    result += ["/w%s" % w for w in settings.get("warnings", self.get_settings_context(), [])]
+    result += ["/w%s" % w for w in settings.get("warnings", context, [])]
     # Debug flags
     if self.config.debug:
       result += ["/Od"]
     else:
       result += ["/Ox"]
     if self.use_debug_codegen():
-      result += ["/Zi", "/DDEBUG_CODEGEN=1"]
-    # Checks en/dis-abled
-    if self.config.checks:
-      result += ["/DENABLE_CHECKS=1"]
-    if self.config.expchecks:
-      result += ["/DEXPENSIVE_CHECKS=1"]
-    if self.config.fail_on_devutils:
-      result += ["/DFAIL_ON_DEVUTILS=1"]
+      result += ["/Zi"]
+    result += self.get_defines(inputs, settings, context)
     # Strict errors
     if not self.config.warn:
       result += ["/WX"]
@@ -300,7 +322,7 @@ class MSVC(Toolchain):
       else:
         option = "Tp"
       return "/%s%s" % (option, shell_escape(path))
-    cflags = ["/c"] + self.get_config_flags(settings)
+    cflags = ["/c"] + self.get_config_flags(inputs, settings)
     if self.config.debug:
       cflags += ["/Fd%s.pdb" % shell_escape(output)]
     for path in includepaths:
@@ -791,6 +813,8 @@ class CController(extend.ToolController):
       help='Print timing information when running tests')
     parser.add_argument('--fastcompile', action='store_true', default=False,
       help='Compile as fast as possible, likely causing slower runtime')
+    parser.add_argument('--dump-file-ids', action='store_true', default=False,
+      help='During compilation, dump a mapping from files to their fat bool ids')
 
 
 # Entry-point used by the framework to get the controller for the given env.
